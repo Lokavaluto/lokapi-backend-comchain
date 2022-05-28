@@ -103,8 +103,13 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
 
     private _userAccounts: any
 
+    public async getUserAccounts (): Promise<any> {
+        return this.userAccounts
+    }
+
     public async getAccounts (): Promise<any> {
         const backendBankAccounts = []
+        // XXXvlab: make paralell wait
         for (const id in this.userAccounts) {
             const userAccount = this.userAccounts[id]
             const bankAccounts = await userAccount.getAccounts()
@@ -189,7 +194,7 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
         return this.isPasswordStrongEnoughSync(password)
     }
 
-    public async createUserAccount ({ password }): Promise<Boolean> {
+    public async createUserAccount ({ password }): Promise<ComchainUserAccount> {
         const currencyMgr = await this.jsc3l.getCurrencyMgr(
             this.jsonData.type.split(':')[1],
         )
@@ -207,7 +212,12 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
             }
             throw new Error(res.error)
         }
-        return res
+        return this.getSubBackend(this.jsc3l, {
+            active: false,
+            address: cipheredWallet.address,
+            wallet: cipheredWallet,
+            message_key: wallet.messageKeysFromWallet(),
+        })
     }
 
 }
@@ -307,18 +317,44 @@ export class ComchainUserAccount {
         return (await this.getStatus()) == 1
     }
 
+    public async requiresUnlock () {
+        return true
+    }
+
+    /**
+     * Use `requestLocalPassword` that is provided by the GUI to
+     * return the decrypted wallet.
+     */
+    public async unlockWallet(requestCredentialsFromUserFn: any) {
+        let [ _password, wallet ] = await this._unlockWallet(requestCredentialsFromUserFn)
+        return wallet
+    }
+
+    /**
+     * Use `requestLocalPassword` that is provided by the GUI to
+     * check and return the valid wallet password.
+     */
+    public async requestCredentials(requestCredentialsFromUserFn: any) {
+        let [ password, _wallet ] = await this._unlockWallet(requestCredentialsFromUserFn)
+        return password
+    }
+
     /**
      * This action will use `requestLocalPassword` that is provided by
      * the GUI.
      */
-    public async unlockWallet() {
+    private async _unlockWallet(requestCredentialsFromUserFn?) {
         let password
         let state = 'firstTry'
+        requestCredentialsFromUserFn = requestCredentialsFromUserFn || this.parent.requestLocalPassword
         while (true) {
-            password = await this.parent.requestLocalPassword(state)
+            password = await requestCredentialsFromUserFn(state, this)
             try {
-                return this.backends.comchain.wallet.getWalletFromPrivKeyFile(
-                    JSON.stringify(this.jsonData.wallet), password)
+                return [
+                    password,
+                    this.backends.comchain.wallet.getWalletFromPrivKeyFile(
+                        JSON.stringify(this.jsonData.wallet), password),
+                    ]
             } catch (e) {
                 state = 'failedUnlock'
                 console.log('Failed to unlock wallet', e)
