@@ -22,7 +22,7 @@ export class ComchainRecipient extends Contact implements t.IRecipient {
         return this.fromUserAccount.getSymbol()
     }
 
-    public async transfer (amount: number, description: string) {
+    public async transfer (amount: number, senderMemo: string, recipientMemo: string = senderMemo ) {
         // XXXvlab: yuck, there need to be a clean up and rationalisation
         //   of these backends and jsonData link madness
         const comchain = this.backends.comchain
@@ -44,8 +44,8 @@ export class ComchainRecipient extends Contact implements t.IRecipient {
         const data = jsc3l.memo.getTxMemoCipheredData(
             wallet.message_key.pub,
             messageKey.public_message_key,
-            description,
-            description,
+            senderMemo,
+            recipientMemo,
         )
         const clearWallet = await this.backends.comchain.unlockWallet()
 
