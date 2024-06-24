@@ -87,13 +87,21 @@ export class ComchainRecipient extends Contact implements t.IRecipient {
         }
 
         let transactionInfo: t.JsonData
-        try {
-            transactionInfo = await jsc3l.ajaxReq.getTransactionInfo(jsonData)
-        } catch (err: any) {
-            console.error('Confirmation Missing', err)
-            throw new e.PaymentConfirmationMissing(
-                "Couldn't get information on last accepted transaction.",
-            )
+        let totalTime = 0
+        while (true) {
+            try {
+                transactionInfo = await jsc3l.ajaxReq.getTransactionInfo(jsonData);
+                break
+            } catch (err) {
+                totalTime += 500;
+                if (totalTime >= 10000) {
+                    console.error('Timeout or Confirmation Missing', err);
+                    throw new e.PaymentConfirmationMissing(
+                        "Couldn't get information on last accepted transaction within 10 seconds."
+                    );
+                }
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
         }
         return new ComchainTransaction(
             {
