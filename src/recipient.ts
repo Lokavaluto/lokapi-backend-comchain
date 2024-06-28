@@ -153,22 +153,17 @@ export class ComchainRecipient extends Contact implements t.IRecipient {
                 'Account is already validated, warning administrative backend',
             )
         }
-        const res = await this.backends.odoo.$post('/comchain/activate', {
-            accounts: [
-                {
-                    recipient_id: this.jsonData.odoo.id,
-                    address: destAddress,
+        await this.backends.odoo.activateAccount([
+            {
+                account_id: `comchain:${destAddress}`,
+                recipient_id: this.jsonData.odoo.id,
+                data: {
                     type,
                     credit_min: limitMin,
                     credit_max: limitMax,
-                },
-            ],
-        })
-        if (!res) {
-            throw new Error(
-                'Admin backend refused activation of ${destAddress}',
-            )
-        }
+                }
+            }
+        ])
     }
 
     get internalId () {
