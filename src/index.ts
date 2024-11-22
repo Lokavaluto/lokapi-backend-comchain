@@ -1,4 +1,5 @@
 import Jsc3lAbstract from '@com-chain/jsc3l'
+import * as Jsc3lException from '@com-chain/jsc3l/build/exception'
 
 import { t, e } from '@lokavaluto/lokapi'
 import { mux } from '@lokavaluto/lokapi/build/generator'
@@ -272,6 +273,7 @@ export class ComchainUserAccount {
         return currencies.CUR_global
     }
 
+    _errorsCache = new Map<Error, Error>
     private async getCurrencyMgr () {
         if (!this._currencyMgrPromise) {
             // This will trigger the discovery of master servers and load
@@ -280,7 +282,23 @@ export class ComchainUserAccount {
                 this.jsonData.wallet.server.name
             )
         }
-        return await this._currencyMgrPromise
+        try {
+            return await this._currencyMgrPromise
+        } catch(err: any) {
+            this._currencyMgrPromise = null
+            if (err instanceof Jsc3lException.NoEndpointAvailable) {
+                if (!this._errorsCache.has(err)) {
+                    this._errorsCache.set(
+                        err,
+                        new e.BackendUnavailableTransient(
+                            "Comchain backend is unavailable due to lack of available endpoint"
+                        )
+                    )
+                }
+                throw this._errorsCache.get(err)
+            }
+            throw e
+        }
     }
 
     _currencyMgrPromise: { [index: string]: any }
