@@ -49,4 +49,13 @@ export class ComchainTransaction extends Transaction implements t.ITransaction {
         return this.jsonData.odoo[add.substring(2)]?.public_name || add
     }
 
+    get isTopUp () {
+        if(this.jsonData.comchain.direction !== 2) return false
+
+        let sender = this.jsonData.comchain['addr_from']
+        const safeWalletAdd = this.parent.parent.jsonData?.safe_wallet_recipient.monujo_backends["comchain:Lemanopolis"][0]
+        return sender === 'Admin' || sender === "0x"+safeWalletAdd
+        
+    }
+
 }
