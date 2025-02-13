@@ -5,6 +5,7 @@ import { t, e } from '@lokavaluto/lokapi'
 import { mux } from '@lokavaluto/lokapi/build/generator'
 import { makePasswordChecker } from '@lokavaluto/lokapi/build/backend/utils'
 import { BackendAbstract } from '@lokavaluto/lokapi/build/backend'
+import UserAccount from '@lokavaluto/lokapi/build/backend/odoo/userAccount'
 
 import { ComchainAccount } from './account'
 import { ComchainRecipient } from './recipient'
@@ -242,19 +243,13 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
 }
 
 
-export class ComchainUserAccount {
+export class ComchainUserAccount extends UserAccount {
 
     address: string
-    parent: BackendAbstract
-    backends: { [index: string]: any }
-    jsonData: { [index: string]: any }
-
 
     constructor (backends, parent, jsonData) {
+        super(backends, parent, jsonData)
         this.address = jsonData.wallet.address
-        this.parent = parent
-        this.backends = backends
-        this.jsonData = jsonData
     }
 
     public get active () {
