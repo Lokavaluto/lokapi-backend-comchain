@@ -65,4 +65,16 @@ export class ComchainTransaction extends Transaction implements t.ITransaction {
         )
     }
 
+    get isReconversion () {
+        if (this.jsonData.comchain.direction !== 1) return false
+        const recipient = this.jsonData.comchain['addr_to']
+        const safeWallet = this.parent.parent.jsonData?.safe_wallet_recipient
+        if (!safeWallet) return false
+        let backend = this.parent.parent
+        return (
+            recipient ===
+            '0x' + safeWallet.monujo_backends[backend.internalId][0]
+        )
+    }
+
 }
