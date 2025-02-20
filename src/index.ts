@@ -9,7 +9,7 @@ import UserAccount from '@lokavaluto/lokapi/build/backend/odoo/userAccount'
 
 import { ComchainAccount } from './account'
 import { ComchainRecipient } from './recipient'
-import { ComchainTransaction } from './transaction'
+import { ComchainTransaction, isReconversion } from './transaction'
 import { ComchainCreditRequest } from './creditRequest'
 import { intCents2strAmount, strAmount2intCents } from './helpers'
 
@@ -488,8 +488,10 @@ export class ComchainUserAccount extends UserAccount {
                 break
         }
 
+        const backend = this.parent
         const currencyMgr = await this.getCurrencyMgr()
         const addressResolve = {}
+        const reconversionStatusResolve = {}
         const limit = 30
         let offset = 0
         while (true) {
@@ -524,6 +526,25 @@ export class ComchainUserAccount extends UserAccount {
                     addressResolve[k] = contacts[k]
                 }
             }
+            // XXXvlab: will need to change all internalId's to match new
+            // format
+            const backendInternalId = backend.internalId.replace(":", "://")
+            const uniqueReconversionAddresses = transactionsData
+                .filter((txData: any) => isReconversion(txData, backend))
+                .map((txData:any) => `${backendInternalId}/tx/${txData.hash}`)
+                .filter((txId: any, idx, self) => self.indexOf(txId) === idx &&
+                    typeof reconversionStatusResolve[txId] === 'undefined')
+
+            if (uniqueReconversionAddresses.length > 0) {
+                const reconversions = await this.backends.odoo.$post(
+                    '/partner/reconversions',
+                    {
+                        transactions: uniqueReconversionAddresses,
+                    })
+                for (const t in reconversions) {
+                    reconversionStatusResolve[t] = reconversions[t]
+                }
+            }
             for (let idx = 0; idx < transactionsData.length; idx++) {
                 const transactionData = transactionsData[idx]
                 if (transactionData.addr_to === `0x${this.address}`) {
@@ -537,7 +558,7 @@ export class ComchainUserAccount extends UserAccount {
                             comchain: Object.assign({}, transactionData, {
                                 amount: transactionData.recieved,
                             }),
-                            odoo: addressResolve,
+                            odoo: {addressResolve, reconversionStatusResolve}
                         }
                     )
                 }
@@ -552,7 +573,7 @@ export class ComchainUserAccount extends UserAccount {
                             comchain: Object.assign({}, transactionData, {
                                 amount: -transactionData.sent,
                             }),
-                            odoo: addressResolve,
+                            odoo: {addressResolve, reconversionStatusResolve}
                         }
                     )
                 }
