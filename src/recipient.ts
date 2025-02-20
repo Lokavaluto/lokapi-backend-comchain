@@ -107,17 +107,25 @@ export class ComchainRecipient extends Contact implements t.IRecipient {
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
         }
+
+        let reconversionStatusResolve = {}
+        reconversionStatusResolve[`${this.backendId}/tx/${transactionInfo.hash}`] = false
         return new ComchainTransaction(
             {
                 ...this.backends,
                 ...{ comchain: jsc3l },
             },
-            this.parent,
+            this,
             {
                 comchain: Object.assign({}, transactionInfo, {
                     amount: -transactionInfo.sent,
                 }),
-                odoo: Object.fromEntries([[destAddress, this.jsonData.odoo]]),
+                odoo: {
+                    addressResolve: Object.fromEntries([
+                        [destAddress, this.jsonData.odoo],
+                    ]),
+                    reconversionStatusResolve,
+                },
             },
         )
     }

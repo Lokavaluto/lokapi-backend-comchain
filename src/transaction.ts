@@ -2,6 +2,18 @@ import { t } from '@lokavaluto/lokapi'
 import { BridgeObject, Transaction } from '@lokavaluto/lokapi/build/backend'
 
 
+export function isReconversion(jsonData, backend) {
+    if (jsonData.direction !== 1) return false
+    const recipient = jsonData['addr_to']
+    const safeWallet = backend.jsonData?.safe_wallet_recipient
+    if (!safeWallet) return false
+    return (
+        recipient ===
+            '0x' + safeWallet.monujo_backends[backend.internalId][0]
+    )
+}
+
+
 export class ComchainTransaction extends Transaction implements t.ITransaction {
 
     get amount () {
@@ -21,12 +33,12 @@ export class ComchainTransaction extends Transaction implements t.ITransaction {
     }
 
     get description () {
-        if (this.parent.jsonData.message_key) {
+        if (this.parent.parent.jsonData.message_key) {
             try {
                 const data = this.backends.comchain.jsc3l.memo.getTransactionMemo(
                     this.jsonData.comchain,
-                    `0x${this.parent.jsonData.wallet.address}`,
-                    this.parent.jsonData.message_key
+                    `0x${this.parent.parent.jsonData.wallet.address}`,
+                    this.parent.parent.jsonData.message_key
                 )
                 return data
             } catch (err) {
@@ -66,15 +78,13 @@ export class ComchainTransaction extends Transaction implements t.ITransaction {
     }
 
     get isReconversion () {
-        if (this.jsonData.comchain.direction !== 1) return false
-        const recipient = this.jsonData.comchain['addr_to']
-        const safeWallet = this.parent.parent.jsonData?.safe_wallet_recipient
-        if (!safeWallet) return false
-        let backend = this.parent.parent
-        return (
-            recipient ===
-            '0x' + safeWallet.monujo_backends[backend.internalId][0]
-        )
+        const backend = this.parent.parent
+        if (!isReconversion(this.jsonData.comchain, backend)) {
+            return false
+        }
+
+        const backendInternalId = backend.internalId.replace(":", "://")
+        return this.jsonData.odoo.reconversionStatusResolve[`${backendInternalId}/tx/${this.id}`] || true
     }
 
 }
