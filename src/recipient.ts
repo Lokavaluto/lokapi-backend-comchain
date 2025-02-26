@@ -94,17 +94,19 @@ export class ComchainRecipient extends Contact implements t.IRecipient {
         let totalTime = 0
         while (true) {
             try {
-                transactionInfo = await jsc3l.ajaxReq.getTransactionInfo(jsonData);
+                transactionInfo = await jsc3l.ajaxReq.getTransactionInfo(
+                    jsonData,
+                )
                 break
             } catch (err) {
-                totalTime += 500;
+                totalTime += 500
                 if (totalTime >= 10000) {
-                    console.error('Timeout or Confirmation Missing', err);
+                    console.error('Timeout or Confirmation Missing', err)
                     throw new e.PaymentConfirmationMissing(
-                        "Couldn't get information on last accepted transaction within 10 seconds."
-                    );
+                        "Couldn't get information on last accepted transaction within 10 seconds.",
+                    )
                 }
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise((resolve) => setTimeout(resolve, 500))
             }
         }
 
@@ -151,18 +153,18 @@ export class ComchainRecipient extends Contact implements t.IRecipient {
                 1,
                 type,
                 limitMin,
-                limitMax
+                limitMax,
             )
             try {
                 queryUntil(
                     () =>
                         this.parent.jsc3l.bcRead.getAccountStatus(destAddress),
-                    (res) => res === 1
+                    (res) => res === 1,
                 )
             } catch (err) {
                 if (err instanceof e.TimeoutError) {
                     console.log(
-                        'Transaction did not change account status in the expected time frame.'
+                        'Transaction did not change account status in the expected time frame.',
                     )
                     throw err
                 }
@@ -181,8 +183,8 @@ export class ComchainRecipient extends Contact implements t.IRecipient {
                     type,
                     credit_min: limitMin,
                     credit_max: limitMax,
-                }
-            }
+                },
+            },
         ])
     }
 
