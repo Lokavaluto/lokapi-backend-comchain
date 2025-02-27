@@ -27,6 +27,27 @@ export class ComchainRecipient extends Contact implements t.IRecipient {
         senderMemo: string,
         recipientMemo: string = senderMemo,
     ) {
+        let bcTransaction = this.parent.jsc3l.bcTransaction
+        let transferNant = bcTransaction.transferNant.bind(bcTransaction)
+        return await this.transferFn(
+            transferNant,
+            amount,
+            senderMemo,
+            recipientMemo,
+        )
+    }
+
+    private async transferFn (
+        fn: (
+            clearWallet: any,
+            destAddress: string,
+            amount: number,
+            data: any,
+        ) => any,
+        amount: number,
+        senderMemo: string,
+        recipientMemo: string = senderMemo,
+    ) {
         // XXXvlab: yuck, there need to be a clean up and rationalisation
         //   of these backends and jsonData link madness
         const comchain = this.backends.comchain
@@ -55,12 +76,7 @@ export class ComchainRecipient extends Contact implements t.IRecipient {
 
         let jsonData: t.JsonData
         try {
-            jsonData = await jsc3l.bcTransaction.transferNant(
-                clearWallet,
-                destAddress,
-                amount,
-                data,
-            )
+            jsonData = await fn(clearWallet, destAddress, amount, data)
         } catch (err) {
             if (err instanceof APIError) {
                 if (err.message === 'Incompatible_Amount') {
