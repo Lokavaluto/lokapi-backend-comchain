@@ -62,6 +62,9 @@ export class ComchainAccount extends Account implements t.IAccount {
      */
     public async getCreditUrl (amount: number): Promise<string> {
         const wid = this.parent.jsonData.wallet.address
+        if (amount >= 2**46 ) {
+            throw new Error('Amount is exceeding limits for safe representation')
+        }
         return this.backends.odoo.$post('/comchain/credit', {
             comchain_address: wid,
             amount,
