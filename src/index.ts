@@ -6,6 +6,7 @@ import { mux } from '@lokavaluto/lokapi/build/generator'
 import { makePasswordChecker } from '@lokavaluto/lokapi/build/backend/utils'
 import { BackendAbstract } from '@lokavaluto/lokapi/build/backend'
 import UserAccount from '@lokavaluto/lokapi/build/backend/odoo/userAccount'
+import { e as httpRequestExc } from '@0k/types-request'
 
 import { ComchainAccount } from './account'
 import { ComchainRecipient } from './recipient'
@@ -536,11 +537,22 @@ export class ComchainUserAccount extends UserAccount {
                     typeof reconversionStatusResolve[txId] === 'undefined')
 
             if (uniqueReconversionAddresses.length > 0) {
-                const reconversions = await this.backends.odoo.$post(
-                    '/partner/reconversions',
-                    {
-                        transactions: uniqueReconversionAddresses,
-                    })
+                let reconversions
+                try {
+                    reconversions = await this.backends.odoo.$post(
+                        '/partner/reconversions',
+                        {
+                            transactions: uniqueReconversionAddresses,
+                        }
+                    )
+                } catch (err) {
+                    if (err instanceof httpRequestExc.HttpError && err.code === 404) {
+                        // Remain compatible if API point doesn't exist
+                        reconversions = {}
+                    } else {
+                        throw err
+                    }
+                }
                 for (const t in reconversions) {
                     reconversionStatusResolve[t] = reconversions[t]
                 }
