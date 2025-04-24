@@ -1,5 +1,5 @@
 import { t, e } from '@lokavaluto/lokapi'
-import { Contact } from '@lokavaluto/lokapi/build/backend/odoo/contact'
+import Recipient from  '@lokavaluto/lokapi/build/backend/odoo/recipient'
 
 import { sleep, queryUntil } from '@lokavaluto/lokapi/build/utils'
 
@@ -8,7 +8,7 @@ import { APIError } from '@com-chain/jsc3l/build/exception'
 import { ComchainTransaction } from './transaction'
 
 
-export class ComchainRecipient extends Contact implements t.IRecipient {
+export class ComchainRecipient extends Recipient implements t.IRecipient {
 
     get backendId () {
         return this.parent.internalId
@@ -22,6 +22,11 @@ export class ComchainRecipient extends Contact implements t.IRecipient {
         return this.fromUserAccount.getSymbol()
     }
 
+    get walletInternalId () {
+        debugger
+        return `comchain:${this.jsonData.comchain.address}` 
+    }
+    
     public async transfer (
         amount: number | string,
         senderMemo: string,

@@ -473,7 +473,8 @@ export class ComchainUserAccount extends UserAccount {
     }
 
     get internalId () {
-        return `comchain:${this.address}`
+        return `comchain://${this}/user/${this.address}`
+        //return `comchain:${this.address}`
     }
 
     public async * getTransactions (opts: any): AsyncGenerator {
