@@ -227,4 +227,9 @@ export class ComchainRecipient extends Contact implements t.IRecipient {
             ],
         })
     }
+
+    public async isBusinessForFinanceBackend () {
+        const type = await this.parent.jsc3l.bcRead.getAccountType(this.jsonData.comchain.address)
+        return type === 1
+    }
 }
