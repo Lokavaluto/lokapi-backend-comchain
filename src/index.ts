@@ -370,6 +370,10 @@ export class ComchainUserAccount extends UserAccount {
         return accountType == 2 || accountType == 3
     }
 
+    public async isBusinessForFinanceBackend () {
+        return (await this.getType()) == 1
+    }
+
     public async isActiveAccount () {
         return (await this.getStatus()) == 1
     }
