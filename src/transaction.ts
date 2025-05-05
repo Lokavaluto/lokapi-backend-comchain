@@ -87,4 +87,15 @@ export class ComchainTransaction extends Transaction implements t.ITransaction {
         return this.jsonData.odoo.reconversionStatusResolve[`${backendInternalId}/tx/${this.id}`] || true
     }
 
+
+    get tags () {
+        const tags = []
+        if (this.jsonData.comchain.type === "Transfer") {
+            tags.push("collateralized")
+        }
+        if (this.jsonData.comchain.type === "TransferCredit") {
+            tags.push("barter")
+        }
+        return tags
+    }
 }

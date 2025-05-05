@@ -15,6 +15,10 @@ export class ComchainAccount extends Account implements t.IAccount {
         return this.jsonData.comchain.type
     }
 
+    get isBarter() {
+        return this.type === 'Cm'
+    }
+
     async getBalance (blockNb: string | number = 'pending') {
         const cc = this.backends.comchain
         const wid = this.parent.jsonData.wallet.address
@@ -24,6 +28,34 @@ export class ComchainAccount extends Account implements t.IAccount {
     public async getSymbol () {
         let currencies = this.backends.comchain.customization.getCurrencies()
         return currencies.CUR
+    }
+
+    private _cmLowLimit: number
+    public async getLowLimit () {
+        if (this.type !== 'Cm') {
+            return 0
+        }
+
+        if (!this._cmLowLimit) {
+            const cc = this.backends.comchain
+            const wid = this.parent.jsonData.wallet.address
+            this._cmLowLimit = await cc.bcRead.getCmLimitBelow(wid)
+        }
+        return this._cmLowLimit
+    }
+
+    private _cmHighLimit: number
+    public async getHighLimit () {
+        if (this.type !== 'Cm') {
+            return null
+        }
+
+        if (!this._cmHighLimit) {
+            const cc = this.backends.comchain
+            const wid = this.parent.jsonData.wallet.address
+            this._cmHighLimit = await cc.bcRead.getCmLimitAbove(wid)
+        }
+        return this._cmHighLimit
     }
 
     public async getCurrencyName () {

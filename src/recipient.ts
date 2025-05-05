@@ -23,18 +23,109 @@ export class ComchainRecipient extends Contact implements t.IRecipient {
     }
 
     public async transfer (
-        amount: number,
+        amount: number | string,
         senderMemo: string,
         recipientMemo: string = senderMemo,
     ) {
-        let bcTransaction = this.parent.jsc3l.bcTransaction
-        let transferNant = bcTransaction.transferNant.bind(bcTransaction)
-        return await this.transferFn(
-            transferNant,
-            amount,
-            senderMemo,
-            recipientMemo,
+        if (typeof amount === "string") {
+            amount = parseFloat(amount)
+        }
+        let transactions = []
+        let jsc3l = this.parent.jsc3l
+        let bcTransaction = jsc3l.bcTransaction
+        let destAddress = this.jsonData.comchain.address
+
+        const safeWallet = this.parent.jsonData?.safe_wallet_recipient
+        let split
+        if (
+            safeWallet &&
+            safeWallet.monujo_backends[this.backendId][0] === destAddress
+        ) {
+            split = { cm: 0, nant: amount }
+        } else {
+            // We'll need to check splitting rules
+
+            let moneyAccounts = await this.fromUserAccount.getAccounts()
+            let cmAccount = moneyAccounts.find((acc) => acc.type === 'Cm')
+            let nantAccount = moneyAccounts.find((acc) => acc.type === 'Nant')
+            if (!cmAccount) {
+                split = { cm: 0, nant: amount }
+            } else {
+                let cmBal = await cmAccount.getBalance()
+                let nantBal = nantAccount ? await nantAccount.getBalance() : 0
+                let cmLowLimit = await cmAccount.getLowLimit()
+                try {
+                    split = jsc3l.utils.getSplitting(
+                        amount, {cm: parseFloat(cmBal), nant: parseFloat(nantBal)}, parseFloat(cmLowLimit))
+                } catch(err: any) {
+                    // YYYvlab
+                    throw err
+                    // if (err instanceof jsc3l.utils.SplitError) {
+                    //     console.log("Split of transaction failed", )
+                    //     split = { cm: 0, nant: amount }
+                    // }
+                }
+            }
+        }
+        if (split.cm > 0) {
+            let transferCm = bcTransaction.transferCM.bind(bcTransaction)
+            let cmHash = await this.transferFn(
+                transferCm,
+                split.cm,
+                senderMemo,
+                recipientMemo,
+            )
+            transactions.push(cmHash)
+        }
+        if (split.nant > 0) {
+            let transferNant = bcTransaction.transferNant.bind(bcTransaction)
+            let cmNant = await this.transferFn(
+                transferNant,
+                split.nant,
+                senderMemo,
+                recipientMemo,
+            )
+            transactions.push(cmNant)
+        }
+        return transactions
+    }
+
+    async prepareTransfer(amount): Promise<void> {
+        let moneyAccounts = await this.fromUserAccount.getAccounts()
+        let nantAccount = moneyAccounts.find((acc) => acc.type === 'Nant')
+        let realBal
+        try {
+            realBal = await nantAccount.getBalance("latest")
+        } catch (err) {
+            throw new e.PrepareTransferException("getBalance failed", err)
+        }
+        // ensure realBal is the correct format
+        if (
+            !(realBal.includes(".") && realBal.split(".")[1].length === 2)
+        ) {
+            throw new e.PrepareTransferError(`Invalid amount returned by getBalance: ${realBal}`)
+        }
+        const amount_cents = parseInt(amount.replace(".", ""))
+        const realBal_cents = parseInt(realBal.replace(".", ""))
+        const bal_cents = parseInt(
+            nantAccount.bal.replace(".", "")
         )
+        // ensure we are in safe limits (we could use BigInt if needed)
+        Object.entries({ amount_cents, realBal_cents, bal_cents }).forEach(
+            ([label, value]) => {
+                if (value > Number.MAX_SAFE_INTEGER)
+                    throw new e.PrepareTransferAmountError(
+                        `Amount '${label.split("_")[0]}' exceeds safe max values ` +
+                            `for current internal representation (value: ${value})`
+                    )
+            }
+        )
+        if (amount_cents > bal_cents) {
+            throw new e.PrepareTransferInsufficientBalance("Insufficient Balance")
+        }
+        if (amount_cents > realBal_cents) {
+            throw new e.PrepareTransferUnsafeBalance("Unsafe Balance due to pending transactions", realBal)
+        }
     }
 
     private async transferFn (
