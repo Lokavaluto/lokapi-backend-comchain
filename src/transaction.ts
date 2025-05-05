@@ -1,4 +1,4 @@
-import { t } from '@lokavaluto/lokapi'
+import { t, e } from '@lokavaluto/lokapi'
 import { BridgeObject, Transaction } from '@lokavaluto/lokapi/build/backend'
 
 
@@ -14,7 +14,20 @@ export function isReconversion(jsonData, backend) {
 }
 
 
+let requiredKeys = new Set(["amount", "status", "time", "hash", "addr_from", "addr_to", "direction", "type"])
+
+
 export class ComchainTransaction extends Transaction implements t.ITransaction {
+
+    constructor (backends, parent, jsonData) {
+        super(backends, parent, jsonData)
+        const jsonDataKeys = new Set(Object.keys(jsonData.comchain))
+        const diff = new Set([...requiredKeys].filter((key: string) => !jsonDataKeys.has(key)))
+        if (diff.size !== 0) {
+            console.error("Invalid json data for ComchainTransaction", jsonData.comchain)
+            throw new e.InvalidJsonData(`Missing fields in provided json data: ${[...diff].join(", ")}`, jsonData.comchain)
+        }
+    }
 
     get amount () {
         return (this.jsonData.comchain.amount / 100.0).toString()
@@ -87,4 +100,15 @@ export class ComchainTransaction extends Transaction implements t.ITransaction {
         return this.jsonData.odoo.reconversionStatusResolve[`${backendInternalId}/tx/${this.id}`] || true
     }
 
+
+    get tags () {
+        const tags = []
+        if (this.jsonData.comchain.type === "Transfer") {
+            tags.push("collateralized")
+        }
+        if (this.jsonData.comchain.type === "TransferCredit") {
+            tags.push("barter")
+        }
+        return tags
+    }
 }
