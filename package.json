@@ -7,7 +7,7 @@
     "scripts": {
         "prepare": "tsc",
         "lint": "eslint --ignore-path .gitignore --ext .js,.ts .",
-        "test": "vitest run --bail 1"
+        "test": "vitest run"
     },
     "author": "Valentin LAB",
     "license": "MIT",
