@@ -75,7 +75,7 @@ export class ComchainAccount extends Account implements t.IAccount {
     }
 
     public async prepareTransfer (
-        recipient: ComchainRecipient,
+        recipient: t.IRecipient,
         amount: string,
         senderMemo: string,
         recipientMemo: string = senderMemo,
