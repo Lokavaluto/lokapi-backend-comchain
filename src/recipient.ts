@@ -7,8 +7,8 @@ import { sleep, queryUntil } from '@lokavaluto/lokapi/build/utils'
 import { APIError } from '@com-chain/jsc3l/build/exception'
 
 import { ComchainTransaction } from './transaction'
-
 import { intCents2strAmount, strAmount2intCents } from './helpers'
+import { ttlcache, singleton } from './cache'
 
 
 export class ComchainRecipient extends Recipient implements t.IRecipient {
@@ -31,19 +31,28 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
         return this.fromUserAccount.getSymbol()
     }
 
-    private async getSplitting(amount: string, cmAccount, nantAccount, blockNb: "pending" | number) {
+    @ttlcache({
+        ttl: (x: any) => x.args.blockNb === "pending" ? 3 : 3600,
+        key: ({instance, args: [amount, cmAccount, nantAccount, blockNb, signal]}) => [
+            amount, cmAccount.internalId, nantAccount.internalId, blockNb,
+        ],
+        cacheOnSettled: true
+    })
+    private async getSplitting(amount: string, cmAccount, nantAccount, blockNb: "pending" | number, signal: AbortSignal) {
+
+        signal.throwIfAborted()
         let jsc3l = this.parent.jsc3l
         const cc = await this.fromUserAccount.getCurrencyMgr()
         const recipientAddress = this.jsonData.comchain.address
 
-        // XXXvlab: these requests would be better if batched in some way, and if non-numeric
-        // block nb, it won't risk receiving inconsistent data.
-        let cmBal = await cmAccount.getBalance(blockNb)
-        let nantBal = nantAccount ? await nantAccount.getBalance(blockNb) : "0.00"
-        let cmLowLimit = await cmAccount.getLowLimit(blockNb)
-        let cmReceiverHighLimit = await cc.bcRead.getCmLimitAbove(recipientAddress, blockNb)
-        let cmReceiverBalance = await cc.bcRead.getCmBalance(recipientAddress, blockNb)
-
+        const [cmBal, nantBal, cmLowLimit, cmReceiverHighLimit, cmReceiverBalance] = await Promise.all([
+            cmAccount.getBalance(blockNb),
+            nantAccount ? nantAccount.getBalance(blockNb) : "0.00",
+            cmAccount.getLowLimit(blockNb),
+            cc.bcRead.getCmLimitAbove(recipientAddress, blockNb),
+            cc.bcRead.getCmBalance(recipientAddress, blockNb)
+        ])
+        signal.throwIfAborted()
 
         let cmReceiverCanReceiveCents = strAmount2intCents(cmReceiverHighLimit) - strAmount2intCents(cmReceiverBalance)
         let split
@@ -79,39 +88,16 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
         }
     }
 
-    async prepareTransfer(
-        amount: string,
-        senderMemo: string,
-        recipientMemo: string = senderMemo,
-    ): Promise<t.ITransaction[]> {
+    @ttlcache({
+        ttl: 5,
+        key: ({instance, args: [amount, signal]}) => amount,
+        cacheOnSettled: true
+    })
+    async _prepareSplitting(amount: string, signal: AbortSignal) {
         let moneyAccounts = await this.fromUserAccount.getAccounts()
         let nantAccount = moneyAccounts.find((acc) => acc.type === 'Nant')
         let cmAccount = moneyAccounts.find((acc) => acc.type === 'Cm')
 
-        let realNantBal
-        try {
-            realNantBal = await nantAccount.getBalance("latest")
-        } catch (err) {
-            throw new e.PrepareTransferException("Collaterized getBalance latest failed", err)
-        }
-        let pendingNantBal
-        try {
-            pendingNantBal = await nantAccount.getBalance()
-        } catch (err) {
-            throw new e.PrepareTransferException("Collaterized getBalance pending failed", err)
-        }
-
-        // ensure realNantBal is the correct format
-        if (
-            !(realNantBal.includes(".") && realNantBal.split(".")[1].length === 2)
-        ) {
-            throw new e.PrepareTransferError(`Invalid amount returned by getBalance: ${realNantBal}`)
-        }
-        const amountCents = strAmount2intCents(amount)
-        const realNantBalCents = strAmount2intCents(realNantBal)
-        const pendingNantBalCents = strAmount2intCents(pendingNantBal)
-
-        let transactions = []
         let destAddress = this.jsonData.comchain.address
         const safeWallet = this.parent.jsonData?.safe_wallet_recipient
         let split
@@ -120,6 +106,35 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
                 safeWallet.monujo_backends[this.backendId][0] === destAddress) ||
                 !cmAccount
         ) {
+            const [ realNantBal, pendingNantBal, nantSymbol ] = await Promise.all([
+                async function () {
+                    try {
+                        return await nantAccount.getBalance("latest")
+                    } catch (err) {
+                        throw new e.PrepareTransferException("Collaterized getBalance latest failed", err)
+                    }
+                }(),
+                async function () {
+                    try {
+                        return await nantAccount.getBalance("pending")
+                    } catch (err) {
+                        throw new e.PrepareTransferException("Collaterized getBalance pending failed", err)
+                    }
+                }(),
+                nantAccount.getSymbol()
+            ])
+            signal.throwIfAborted()
+
+            // ensure realNantBal is the correct format
+            if (
+                !(realNantBal.includes(".") && realNantBal.split(".")[1].length === 2)
+            ) {
+                throw new e.PrepareTransferError(`Invalid amount returned by getBalance: ${realNantBal}`)
+            }
+
+            const amountCents = strAmount2intCents(amount)
+            const realNantBalCents = strAmount2intCents(realNantBal)
+            const pendingNantBalCents = strAmount2intCents(pendingNantBal)
 
             if (amountCents > pendingNantBalCents) {
                 throw new e.PrepareTransferInsufficientBalance(
@@ -135,46 +150,83 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
                 )
             }
 
-            split = { cm: 0, nant: amount }
-
-        } else {
-            // We'll need to check splitting rules
-            let splitPending = await this.getSplitting(amount, cmAccount, nantAccount, "pending")
-            const cc = await this.fromUserAccount.getCurrencyMgr()
-            let currentBlockNb = await cc.ajaxReq.currBlock()
-            let splitLatest
-            try {
-                splitLatest = await this.getSplitting(amount, cmAccount, nantAccount, currentBlockNb)
-            } catch(err: any) {
-                if (err instanceof e.RecipientWouldHitCmHighLimit || err instanceof e.PrepareTransferInsufficientBalance) {
-                    throw new e.PrepareTransferUnsafeSplit(
-                        "This splitting is unsafe due to pending operations",
-                        err.safeAmount,
-                        err,
-                    )
-                }
-                console.error("Unexpected error while computing latest getSplitting", err)
-
-                throw err
+            return {
+                split:{ cm: "0.00", nant: amount },
+                symbol: {nant: nantSymbol}
             }
-            if (splitLatest.cm !== splitPending.cm || splitLatest.nant !== splitPending.nant) {
-                throw new e.PrepareTransferUnsafeSplit(
-                    "This splitting is unsafe due to pending operations",
-                    0,
-                    null
-                )
-            }
-            split = splitPending
+
         }
+        // We'll need to check splitting rules
+        const self = this
+        const cc = await this.fromUserAccount.getCurrencyMgr()
+        const currentBlockNb = await cc.ajaxReq.currBlock()
+        const [ splitPending, splitLatest, cmSymbol, nantSymbol] = await Promise.all([
+            this.getSplitting(amount, cmAccount, nantAccount, "pending", signal),
+            async function () {
+                let splitLatest
+                try {
+                    splitLatest = await self.getSplitting(
+                        amount, cmAccount, nantAccount, currentBlockNb, signal
+                    )
+                } catch(err: any) {
+                    if (signal.aborted) throw err
+                    if (err instanceof DOMException) {
+                        console.warn(`Recipient: Signal was not aborted but we got the exception`)
+                        throw err
+                    }
+
+                    if (err instanceof e.RecipientWouldHitCmHighLimit || err instanceof e.PrepareTransferInsufficientBalance) {
+                        throw new e.PrepareTransferUnsafeSplit(
+                            "This splitting is unsafe due to pending operations",
+                            err.safeAmount,
+                            err,
+                        )
+                    }
+                    console.error("Unexpected error while computing latest getSplitting", err)
+                    throw err
+                }
+                return splitLatest
+            }(),
+            cmAccount.getSymbol(),
+            nantAccount.getSymbol(),
+        ])
+
+        if (splitLatest.cm !== splitPending.cm || splitLatest.nant !== splitPending.nant) {
+            throw new e.PrepareTransferUnsafeSplit(
+                "This splitting is unsafe due to pending operations",
+                0,
+                null
+            )
+        }
+        return {
+            split: splitPending,
+            symbol: {nant: nantSymbol, cm: cmSymbol}
+        }
+    }
+
+    async prepareTransfer(
+        amount: string,
+        senderMemo: string,
+        recipientMemo: string = senderMemo,
+        signal: AbortSignal,
+    ): Promise<t.ITransaction[]> {
+
+        let transactions = []
+
+        signal.throwIfAborted()
+
+        const {split, symbol} = await this._prepareSplitting(amount, signal)
+
+        signal.throwIfAborted()
+
         let jsc3l = this.parent.jsc3l
         let bcTransaction = jsc3l.bcTransaction
-        if (split.cm > 0) {
-            const currency = await cmAccount.getSymbol()
+        if (strAmount2intCents(split.cm) > 0) {
             let transferCm = bcTransaction.transferCM.bind(bcTransaction)
             let cmTx = new PlannedTransaction({
                 amount: -split.cm,
                 description: senderMemo,
-                currency,
+                currency: symbol.cm,
                 related: this.name,
                 tags: ["barter"],
                 executeData: {
@@ -189,13 +241,12 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
             })
             transactions.push(cmTx)
         }
-        if (split.nant > 0) {
-            const currency = await nantAccount.getSymbol()
+        if (strAmount2intCents(split.nant) > 0) {
             let transferNant = bcTransaction.transferNant.bind(bcTransaction)
             let nantTx = new PlannedTransaction({
                 amount: -split.nant,
                 description: senderMemo,
-                currency,
+                currency: symbol.nant,
                 related: this.name,
                 tags: ["collateralized"],
                 executeData: {
@@ -406,6 +457,7 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
         })
     }
 
+    @ttlcache({ttl: 15})
     public async isBusinessForFinanceBackend () {
         const type = await this.parent.jsc3l.bcRead.getAccountType(this.jsonData.comchain.address)
         return type === 1

@@ -4,21 +4,27 @@ import { ComchainRecipient } from './recipient'
 
 import Account from '@lokavaluto/lokapi/build/backend/odoo/account'
 
+import { ttlcache, singleton } from './cache'
+
 
 export class ComchainAccount extends Account implements t.IAccount {
 
+    @singleton
     get creditable () {
         return this.type === 'Nant'
     }
 
+    @singleton
     get type () {
         return this.jsonData.comchain.type
     }
 
+    @singleton
     get isBarter() {
         return this.type === 'Cm'
     }
 
+    @ttlcache({ttl: 1})
     async getBalance (blockNb: string | number = 'pending') {
         const cc = this.backends.comchain
         const wid = this.parent.jsonData.wallet.address
@@ -30,34 +36,29 @@ export class ComchainAccount extends Account implements t.IAccount {
         return currencies.CUR
     }
 
-    private _cmLowLimit: number
+    @ttlcache({ttl: 30})
     public async getLowLimit (blockNb: string | number = 'pending') {
         if (this.type !== 'Cm') {
-            return 0
+            return null
         }
 
-        if (!this._cmLowLimit) {
-            const cc = this.backends.comchain
-            const wid = this.parent.jsonData.wallet.address
-            this._cmLowLimit = await cc.bcRead.getCmLimitBelow(wid, blockNb)
-        }
-        return this._cmLowLimit
+        const cc = this.backends.comchain
+        const wid = this.parent.jsonData.wallet.address
+        return await cc.bcRead.getCmLimitBelow(wid, blockNb)
     }
 
-    private _cmHighLimit: number
+    @ttlcache({ttl: 30})
     public async getHighLimit () {
         if (this.type !== 'Cm') {
             return null
         }
 
-        if (!this._cmHighLimit) {
-            const cc = this.backends.comchain
-            const wid = this.parent.jsonData.wallet.address
-            this._cmHighLimit = await cc.bcRead.getCmLimitAbove(wid)
-        }
-        return this._cmHighLimit
+        const cc = this.backends.comchain
+        const wid = this.parent.jsonData.wallet.address
+        return await cc.bcRead.getCmLimitAbove(wid)
     }
 
+    @singleton
     public async getCurrencyName () {
         let type = this.type
         let currencies = this.backends.comchain.customization.getCurrencies()
@@ -70,6 +71,7 @@ export class ComchainAccount extends Account implements t.IAccount {
         }
     }
 
+    @singleton
     get internalId () {
         return `${this.parent.internalId}/${this.type}`
     }
@@ -79,9 +81,10 @@ export class ComchainAccount extends Account implements t.IAccount {
         amount: string,
         senderMemo: string,
         recipientMemo: string = senderMemo,
+        signal: AbortSignal,
     ) {
         // On comchain, account transfer is managed through the owner account
-        return recipient.prepareTransfer(amount, senderMemo, recipientMemo)
+        return await recipient.prepareTransfer(amount, senderMemo, recipientMemo, signal)
     }
 
 
@@ -103,10 +106,9 @@ export class ComchainAccount extends Account implements t.IAccount {
         })
     }
 
-
+    @ttlcache({ttl: 3})
     public async isBusinessForFinanceBackend () {
-        return (await this.parent.isBusinessForFinanceBackend())
+        return await this.parent.isBusinessForFinanceBackend()
     }
-
 
 }
