@@ -5,7 +5,7 @@
     "main": "build/index.js",
     "types": "build/index.d.ts",
     "scripts": {
-        "prepare": "tsc",
+        "prepare": "ts-patch install -s",
         "lint": "eslint --ignore-path .gitignore --ext .js,.ts .",
         "test": "vitest run"
     },
@@ -18,7 +18,7 @@
     "devDependencies": {
         "@0k/prettier": "^0.2.1",
         "@babel/runtime": "^7.15.4",
-        "@types/node": "^20.14.5",
+        "@types/node": "^24.2.0",
         "@typescript-eslint/eslint-plugin": "^4.29.0",
         "@typescript-eslint/parser": "^4.29.0",
         "eslint": "^7.32.0",
@@ -26,12 +26,13 @@
         "jsdom": "^24.1.0",
         "ts-node": "^10.9.2",
         "ts-patch": "^3.2.1",
-        "typedoc": "^0.26.7",
-        "typescript": "^5.5.3",
-        "vite": "^5.4.4",
-        "vitest": "^1.6.0"
+        "typedoc": "^0.28.9",
+        "typescript": "^5.9.2",
+        "vite": "^7.1.1",
+        "vitest": "^3.2.4"
     },
     "dependencies": {
+        "@0k/cache": "^0.0.6",
         "@0k/types-request": "^1.0.1",
         "@com-chain/jsc3l": ">=2.0.1-rc",
         "@lokavaluto/lokapi": "0.1.0 || >=0.1.1-alpha"

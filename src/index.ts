@@ -13,7 +13,7 @@ import { ComchainRecipient } from './recipient'
 import { ComchainTransaction, isReconversion } from './transaction'
 import { ComchainCreditRequest } from './creditRequest'
 import { intCents2strAmount, strAmount2intCents } from './helpers'
-
+import { ttlcache, singleton } from './cache'
 
 interface IJsonDataWithAddress extends t.JsonData {
     address: string
@@ -23,32 +23,29 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
 
     splitMemoSupport = true
 
-    _jsc3l: Jsc3lAbstract
-
+    @singleton
     get jsc3l () {
-        if (!this._jsc3l) {
-            const { httpRequest, persistentStore } = this
-            class Jsc3l extends Jsc3lAbstract {
-                persistentStore = persistentStore
-                httpRequest = async (opts) => {
-                    if (opts.method === 'POST') {
-                        opts.headers = opts.header || {}
-                        opts.headers['Content-Type'] =
-                            'application/x-www-form-urlencoded'
-                    }
-                    const data = await httpRequest(opts)
-                    try {
-                        return JSON.parse(<string>data)
-                    } catch (e) {
-                        return data
-                    }
+        const { httpRequest, persistentStore } = this
+        class Jsc3l extends Jsc3lAbstract {
+            persistentStore = persistentStore
+            httpRequest = async (opts) => {
+                if (opts.method === 'POST') {
+                    opts.headers = opts.header || {}
+                    opts.headers['Content-Type'] =
+                        'application/x-www-form-urlencoded'
+                }
+                const data = await httpRequest(opts)
+                try {
+                    return JSON.parse(<string>data)
+                } catch (e) {
+                    return data
                 }
             }
-            this._jsc3l = new Jsc3l()
         }
-        return this._jsc3l
+        return new Jsc3l()
     }
 
+    @singleton({key: (x) => x.args[1]})
     private getSubBackend (
         jsc3l: Jsc3lAbstract,
         jsonData: IJsonDataWithAddress
@@ -63,25 +60,21 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
         )
     }
 
+    @singleton({key: (x) => x.instance.jsonData.accounts})
     public get userAccounts () {
-        if (!this._userAccounts) {
-            this._userAccounts = {}
-            this.jsonData.accounts.forEach(
+        return Object.fromEntries(
+            this.jsonData.accounts.map(
                 (bankAccountData: IJsonDataWithAddress) => {
                     const comchainUserAccount = this.getSubBackend(
                         this.jsc3l,
                         bankAccountData
                     )
-                    this._userAccounts[
-                        comchainUserAccount.internalId
-                    ] = comchainUserAccount
+                    return [comchainUserAccount.internalId,
+                            comchainUserAccount]
                 }
             )
-        }
-        return this._userAccounts
+        )
     }
-
-    private _userAccounts: any
 
     public async getAccounts (): Promise<any> {
         const backendBankAccounts = []
@@ -95,7 +88,7 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
         return backendBankAccounts
     }
 
-
+    @singleton
     public makeRecipients (jsonData: t.JsonData): t.IRecipient[] {
         const recipients = []
         if (Object.keys(this.userAccounts).length === 0) {
@@ -439,6 +432,7 @@ export class ComchainUserAccount extends UserAccount {
      * such, it is also having only one account.
      *
      */
+    @ttlcache({ttl: 3})
     async getAccounts () {
         if (!this.active) return []
 
@@ -446,30 +440,28 @@ export class ComchainUserAccount extends UserAccount {
         const currencyMgr = await this.getCurrencyMgr()
         if (currencyMgr.customization.hasNant()) {
             accounts.push(
-                new ComchainAccount(
-                    { comchain: currencyMgr, ...this.backends },
-                    this,
-                    {
-                        comchain: {
-                            address: this.jsonData.address,
-                            type: 'Nant',
-                        },
-                    }
-                )
+                await this.getAccount('Nant')
             )
         }
         if (currencyMgr.customization.hasCM()) {
             accounts.push(
-                new ComchainAccount(
-                    { comchain: this, ...this.backends },
-                    this,
-                    {
-                        comchain: { type: 'Cm' },
-                    }
-                )
+                await this.getAccount('Cm')
             )
         }
         return accounts
+    }
+
+    @singleton
+    private async getAccount(comchainType: 'Cm' | 'Nant') {
+        const currencyMgr = await this.getCurrencyMgr()
+        return new ComchainAccount(
+            { comchain: currencyMgr, ...this.backends },
+            this,
+            {
+                address: this.jsonData.address,
+                comchain: { type: comchainType },
+            }
+        )
     }
 
     get internalId () {
