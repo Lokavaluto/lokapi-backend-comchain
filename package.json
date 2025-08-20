@@ -15,6 +15,12 @@
         "type": "git",
         "url": "git@github.com:Lokavaluto/lokapi-backend-comchain.git"
     },
+    "files": [
+        "build",
+        "src",
+        "README.md",
+        "LICENSE"
+    ],
     "devDependencies": {
         "@0k/prettier": "^0.2.1",
         "@babel/runtime": "^7.15.4",
