@@ -1,7 +1,0 @@
-autogen.sh
-.package.d/
-.dir-locals.el
-skip-prod-transpilation.ts
-tests/
-tsconfig.json
-vitest.config.ts
