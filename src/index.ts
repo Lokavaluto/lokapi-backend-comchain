@@ -234,6 +234,28 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
 
     }
 
+    @ttlcache({ttl: 300})
+    public get technicalAccountAddrs () {
+
+        // Administrative backend's safe wallet
+
+        const technicalAccounts = []
+        const safeWalletRecipient = this.jsonData?.safe_wallet_recipient
+        if (safeWalletRecipient) {
+            const safeWalletAddrs = safeWalletRecipient.monujo_backends[this.internalId]
+            for (const safeWalletAddr of safeWalletAddrs) {
+                technicalAccounts.push('0x' + safeWalletAddr)
+            }
+        }
+
+        // Currency configuration's technical accounts
+
+        const technicalAccountAddrs = this.jsc3l.customization.cfg.server.technicalAccounts || []
+        for (const technicalAccountAddr of technicalAccountAddrs) {
+            technicalAccounts.push(technicalAccountAddr)
+        }
+        return technicalAccounts
+    }
 }
 
 
