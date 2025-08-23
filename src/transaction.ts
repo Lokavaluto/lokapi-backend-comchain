@@ -4,13 +4,8 @@ import { BridgeObject, Transaction } from '@lokavaluto/lokapi/build/backend'
 
 export function isReconversion(jsonData, backend) {
     if (jsonData.direction !== 1) return false
-    const recipient = jsonData['addr_to']
-    const safeWallet = backend.jsonData?.safe_wallet_recipient
-    if (!safeWallet) return false
-    return (
-        recipient ===
-            '0x' + safeWallet.monujo_backends[backend.internalId][0]
-    )
+    const receiverAddr = jsonData['addr_to']
+    return backend.technicalAccountAddrs.includes(receiverAddr)
 }
 
 
@@ -80,14 +75,7 @@ export class ComchainTransaction extends Transaction implements t.ITransaction {
         const sender = this.jsonData.comchain['addr_from']
         if (sender === 'Admin') return true
 
-        const safeWallet = this.parent.parent.jsonData?.safe_wallet_recipient
-        if (!safeWallet) return false
-
-        let backend = this.parent.parent
-        return (
-            sender ===
-            '0x' + safeWallet.monujo_backends[backend.internalId][0]
-        )
+        return this.parent.parent.technicalAccountAddrs.includes(sender)
     }
 
     get isReconversion () {
