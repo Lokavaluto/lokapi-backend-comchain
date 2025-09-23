@@ -76,6 +76,11 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
         )
     }
 
+    async isUnconfigured() {
+        const accounts = await this.getAccounts()
+        return accounts.length === 0
+    }
+
     public async getAccounts (): Promise<any> {
         const backendBankAccounts = []
         for (const id in this.userAccounts) {
