@@ -60,6 +60,24 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
         )
     }
 
+    public getCurrencyName () {
+        if (Object.keys(this.userAccounts).length === 0) {
+            throw new Error(
+                'Current user has no account in comchain. Unsupported yet.'
+            )
+        }
+        if (Object.keys(this.userAccounts).length > 1) {
+            // We will need to select one of the source userAccount of the
+            // current logged in user
+            throw new Error(
+                'Current user has more than one account in comchain. ' +
+                    'Unsupported yet.'
+            )
+        }
+
+        return this.userAccounts[0].getCurrencyName()
+    }
+
     @singleton({key: (x) => x.instance.jsonData.accounts})
     public get userAccounts () {
         return Object.fromEntries(
