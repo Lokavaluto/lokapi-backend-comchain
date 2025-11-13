@@ -638,4 +638,18 @@ export class ComchainUserAccount extends UserAccount {
         )
     }
 
+
+    @ttlcache({ttl: 3})
+    public async getCurrencySupply () {
+        const currencyMgr = await this.getCurrencyMgr()
+        let totalSupply =  await currencyMgr.bcRead.getCurrencySupply()
+
+        for (const technicalAccountAddr of this.parent.technicalAccountAddrs){
+            const technicalAccountNantBalance = await currencyMgr.bcRead.getNantBalance(
+                technicalAccountAddr
+            )
+            totalSupply -= technicalAccountNantBalance
+        }
+        return totalSupply
+    }
 }
