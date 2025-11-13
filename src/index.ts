@@ -48,7 +48,7 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
     @singleton({key: (x) => x.args[1]})
     private getSubBackend (
         jsc3l: Jsc3lAbstract,
-        jsonData: IJsonDataWithAddress
+        jsonData: t.JsonData,
     ) {
         return new ComchainUserAccount(
             {
@@ -97,6 +97,16 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
     async isUnconfigured() {
         const accounts = await this.getAccounts()
         return accounts.length === 0
+    }
+
+    public getUserAccountsFromWalletIdent (currencyIdent: string, walletIdent: string): ComchainUserAccount {
+        return this.getSubBackend(this.jsc3l, {
+            active: true,
+            wallet: {
+                address: `${walletIdent}`,
+                server: { name: currencyIdent },
+            },
+        })
     }
 
     public async getAccounts (): Promise<any> {
@@ -478,32 +488,36 @@ export class ComchainUserAccount extends UserAccount {
      *
      */
     @ttlcache({ttl: 3})
-    async getAccounts () {
+    async getAccountsByAddress (address: string) {
         if (!this.active) return []
 
         const accounts = []
         const currencyMgr = await this.getCurrencyMgr()
         if (currencyMgr.customization.hasNant()) {
             accounts.push(
-                await this.getAccount('Nant')
+                await this.getAccount('Nant', address)
             )
         }
         if (currencyMgr.customization.hasCM()) {
             accounts.push(
-                await this.getAccount('Cm')
+                await this.getAccount('Cm', address)
             )
         }
         return accounts
     }
 
+    async getAccounts () {
+        return await this.getAccountsByAddress(this.jsonData.address)
+    }
+
     @singleton
-    private async getAccount(comchainType: 'Cm' | 'Nant') {
+    private async getAccount(comchainType: 'Cm' | 'Nant', address: string) {
         const currencyMgr = await this.getCurrencyMgr()
         return new ComchainAccount(
             { comchain: currencyMgr, ...this.backends },
             this,
             {
-                address: this.jsonData.address,
+                address,
                 comchain: { type: comchainType },
             }
         )
