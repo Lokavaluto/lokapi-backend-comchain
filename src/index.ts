@@ -23,6 +23,18 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
 
     splitMemoSupport = true
 
+    accountTypeToInt = {
+        personal: 0,
+        professional: 1,
+        admin: 2,
+        pledgeAdmin: 3,
+        propertyAdmin: 4,
+    }
+
+    public getAccountTypeLabels (): string[] {
+        return Object.keys(this.accountTypeToInt)
+    }
+
     @singleton
     get jsc3l () {
         const { httpRequest, persistentStore } = this
@@ -392,6 +404,16 @@ export class ComchainUserAccount extends UserAccount {
             this._type = await currencyMgr.bcRead.getAccountType(this.address)
         }
         return this._type
+    }
+
+    public async getTypeLabel (): Promise<string> {
+        const accountType = await this.getType()
+        for (const [label, value] of Object.entries(this.parent.accountTypeToInt)) {
+            if (value === accountType) {
+                return label
+            }
+        }
+        throw new Error(`Unknown account type value: ${accountType}`)
     }
 
 

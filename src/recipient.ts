@@ -204,6 +204,63 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
         }
     }
 
+    async updateAccount(status: number, accountType: number, lowLimit: number, highLimit: number) {
+        const jsc3l = this.parent.jsc3l
+        const clearWallet = await this.backends.comchain.unlockWallet()
+
+        const accountTypeInt = this.parent.accountTypeToInt[accountType]
+        if (accountTypeInt === undefined) {
+            throw new Error(`Invalid account type: ${accountType}`)
+        }
+
+        let jsonData
+        try {
+            jsonData = await jsc3l.bcTransaction.setAccountParam(
+                clearWallet,
+                this.jsonData.comchain.address,
+                status ? 1:0,
+                accountTypeInt,
+                highLimit,
+                lowLimit
+            )
+        } catch (err: any) {
+            throw err
+        }
+
+
+        if (!/^0x[a-fA-F0-9]{64}$/.test(jsonData.toString())) {
+            console.error(
+                'Unexpected response to setAccountParam (not a transaction id): ',
+                jsonData,
+            )
+            throw new Error('Transaction ID has invalid format')
+        }
+
+        let transactionInfo: t.JsonData
+        let totalTime = 0
+        while (true) {
+            try {
+                transactionInfo = await jsc3l.ajaxReq.getTransactionInfo(
+                    jsonData,
+                )
+            } catch (err) {
+                totalTime += 500
+                if (totalTime >= 10000) {
+                    console.error('Timeout or Confirmation Missing', err)
+                    throw new e.PaymentConfirmationMissing(
+                        "Couldn't get information on last accepted transaction within 10 seconds.",
+                    )
+                }
+                await new Promise((resolve) => setTimeout(resolve, 500))
+                continue
+            }
+            if ((transactionInfo.transaction as any)?.blockHash) break
+            await new Promise((resolve) => setTimeout(resolve, 500))
+        }
+
+        return transactionInfo.transaction
+    }
+
     async prepareTransfer(
         amount: string,
         senderMemo: string,
