@@ -319,7 +319,36 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
             transactions.push(nantTx)
         }
         return transactions
+    }
 
+    public async preparePledge(amount: number, senderMemo: string) {
+        const jsc3l = this.parent.jsc3l
+        const bcTransaction = jsc3l.bcTransaction
+        const pledgeFn = bcTransaction.pledgeAccount.bind(bcTransaction)
+
+        const moneyAccounts = await this.fromUserAccount.getAccounts()
+        const nantAccount = moneyAccounts.find((acc) => acc.type === 'Nant')
+
+        return [
+            new PlannedTransaction(
+                {
+                    amount,
+                    description: senderMemo,
+                    currency: nantAccount.getSymbol(),
+                    related: "Admin",
+                    tags: ["collateralized"],
+                    executeData: {
+                        fn: this.transferFn.bind(this),
+                        args: [
+                            pledgeFn,
+                            amount,
+                            senderMemo,
+                            null
+                        ]
+                    }
+                }
+            )
+        ]
     }
 
     private async transferFn (
@@ -331,7 +360,7 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
         ) => any,
         amount: number,
         senderMemo: string,
-        recipientMemo: string = senderMemo,
+        recipientMemo: string | null = senderMemo,
     ) {
         // XXXvlab: yuck, there need to be a clean up and rationalisation
         //   of these backends and jsonData link madness
@@ -398,7 +427,6 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
                 transactionInfo = await jsc3l.ajaxReq.getTransactionInfo(
                     jsonData,
                 )
-                break
             } catch (err) {
                 totalTime += 500
                 if (totalTime >= 10000) {
@@ -408,7 +436,12 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
                     )
                 }
                 await new Promise((resolve) => setTimeout(resolve, 500))
+                continue
             }
+
+            if (transactionInfo.add1)
+                break
+            await new Promise((resolve) => setTimeout(resolve, 500))
         }
 
 
