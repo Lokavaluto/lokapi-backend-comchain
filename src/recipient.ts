@@ -276,11 +276,11 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
 
         signal.throwIfAborted()
 
-        let jsc3l = this.parent.jsc3l
-        let bcTransaction = jsc3l.bcTransaction
+        const jsc3l = this.parent.jsc3l
+        const bcTransaction = jsc3l.bcTransaction
         if (strAmount2intCents(split.cm) > 0) {
-            let transferCm = bcTransaction.transferCM.bind(bcTransaction)
-            let cmTx = new PlannedTransaction({
+            const transferCm = bcTransaction.transferCM.bind(bcTransaction)
+            const cmTx = new PlannedTransaction({
                 amount: -split.cm,
                 description: senderMemo,
                 currency: symbol.cm,
@@ -299,8 +299,8 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
             transactions.push(cmTx)
         }
         if (strAmount2intCents(split.nant) > 0) {
-            let transferNant = bcTransaction.transferNant.bind(bcTransaction)
-            let nantTx = new PlannedTransaction({
+            const transferNant = bcTransaction.transferNant.bind(bcTransaction)
+            const nantTx = new PlannedTransaction({
                 amount: -split.nant,
                 description: senderMemo,
                 currency: symbol.nant,
