@@ -34,7 +34,7 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
     @ttlcache({
         ttl: (x: any) => x.args.blockNb === "pending" ? 3 : 3600,
         key: ({instance, args: [amount, cmAccount, nantAccount, blockNb, signal]}) => [
-            amount, cmAccount.internalId, nantAccount.internalId, blockNb,
+            amount, cmAccount.internalId, nantAccount ? nantAccount.internalId : "", blockNb,
         ],
         cacheOnSettled: true
     })
@@ -102,7 +102,7 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
         const safeWallet = this.parent.jsonData?.safe_wallet_recipient
         let split
         if (
-            (safeWallet &&
+            (nantAccount && safeWallet &&
                 safeWallet.monujo_backends[this.backendId][0] === destAddress) ||
                 !cmAccount
         ) {
@@ -188,7 +188,7 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
                 return splitLatest
             }(),
             cmAccount.getSymbol(),
-            nantAccount.getSymbol(),
+            nantAccount ? nantAccount.getSymbol() : null,
         ])
 
         if (splitLatest.cm !== splitPending.cm || splitLatest.nant !== splitPending.nant) {
