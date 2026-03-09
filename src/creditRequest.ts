@@ -31,7 +31,7 @@ export class ComchainCreditRequest extends CreditRequest
             )
         }
 
-        if (!(await userAccount.hasCreditRequestValidationRights())) {
+        if (!(await userAccount.hasCreditRequestValidationRightsForFinancialBackend())) {
             throw new e.PermissionDenied(
                 'You need to be admin to validate credit requests'
             )

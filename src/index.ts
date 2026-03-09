@@ -429,13 +429,13 @@ export class ComchainUserAccount extends UserAccount {
     }
 
 
-    public async hasUserAccountValidationRights () {
+    public async hasUserAccountValidationRightsForFinancialBackend () {
         let accountType = await this.getType()
         return accountType == 2 || accountType == 4
     }
 
 
-    public async hasCreditRequestValidationRights () {
+    public async hasCreditRequestValidationRightsForFinancialBackend () {
         let accountType = await this.getType()
         return accountType == 2 || accountType == 3
     }
