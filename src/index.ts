@@ -234,6 +234,10 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
             if (res.error === 'account already exists') {
                 throw new e.UserAccountAlreadyExists(res.error)
             }
+            const walletCurrency = (cipheredWallet as any)?.server?.name
+            if (walletCurrency && res.error.includes(walletCurrency) && res.error.includes('not found')) {
+                throw new e.CurrencyNotAvailable(walletCurrency, res.error)
+            }
             throw new Error(res.error)
         }
         if (typeof cipheredWallet.address !== 'string') {
