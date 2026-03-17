@@ -252,9 +252,12 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
     }
 
     public async registerWallet (cipheredWallet): Promise<ComchainUserAccount> {
-        const currencyMgr = await this.jsc3l.getCurrencyMgr(
-            this.jsonData.type.split(':')[1]
-        )
+        const backendCurrency = this.jsonData.type.split(':')[1]
+        const walletCurrency = (cipheredWallet as any)?.server?.name
+        if (walletCurrency && walletCurrency !== backendCurrency) {
+            throw new e.CurrencyMismatch(walletCurrency)
+        }
+        const currencyMgr = await this.jsc3l.getCurrencyMgr(backendCurrency)
         const userAccount = this.getSubBackend(this.jsc3l, {
             active: false,
             address: cipheredWallet.address,
