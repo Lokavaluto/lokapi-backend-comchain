@@ -29,6 +29,9 @@ export class ComchainTransaction extends Transaction implements t.ITransaction {
     }
 
     get currency () {
+        if (this.jsonData.comchain.isUnknownCurrency) {
+            return '???'
+        }
         return this.backends.comchain.customization.cfg.server.currencies.CUR
     }
 
@@ -96,6 +99,9 @@ export class ComchainTransaction extends Transaction implements t.ITransaction {
         }
         if (this.jsonData.comchain.type === "TransferCredit") {
             tags.push("barter")
+        }
+        if (this.jsonData.comchain.isUnknownCurrency) {
+            tags.push("unknown-currency")
         }
         return tags
     }

@@ -575,6 +575,15 @@ export class ComchainUserAccount extends UserAccount {
 
         const backend = this.parent
         const currencyMgr = await this.getCurrencyMgr()
+        const myCurrency = this.jsonData.wallet.server.name
+        const currencyListMap = await this.backends.comchain.connection.getCurrencyList()
+        // contractToCurrency: "0xABC..." -> "Lokacoin"
+        const contractToCurrency: Record<string, string> = {}
+        for (const [contract, name] of Object.entries(currencyListMap)) {
+            contractToCurrency[contract.toLowerCase()] = name as string
+        }
+        const knownCurrencies = new Set(Object.values(currencyListMap))
+
         const addressResolve = {}
         const reconversionStatusResolve = {}
         const limit = 30
@@ -591,6 +600,51 @@ export class ComchainUserAccount extends UserAccount {
                       limit,
                       offset
                   ))
+
+            // Resolve null currencies by looking up the transactions
+            // on chain to get contract addresses, then match against
+            // the known currency list (batched, like contact resolution).
+            const unresolvedHashes = transactionsData
+                .filter((tx: any) => !tx.currency)
+                .map((tx: any) => tx.hash)
+                .filter(
+                    (h: string, idx: number, self: string[]) =>
+                        self.indexOf(h) === idx
+                )
+            if (unresolvedHashes.length > 0) {
+                const hashToCurrency: Record<string, string> = {}
+                const results = await Promise.all(
+                    unresolvedHashes.map((hash: string) =>
+                        currencyMgr.ajaxReq
+                            .getTransactionInfo(hash)
+                            .catch(() => null)
+                    )
+                )
+                for (let i = 0; i < unresolvedHashes.length; i++) {
+                    const contractAddr =
+                        results[i]?.transaction?.to?.toLowerCase()
+                    if (contractAddr && contractToCurrency[contractAddr]) {
+                        hashToCurrency[unresolvedHashes[i]] =
+                            contractToCurrency[contractAddr]
+                    }
+                }
+                for (const tx of transactionsData) {
+                    if (!tx.currency && hashToCurrency[tx.hash]) {
+                        tx.currency = hashToCurrency[tx.hash]
+                    }
+                }
+            }
+
+            // Filter transactions by currency:
+            // - tx.currency matches ours: keep
+            // - tx.currency is another known currency: skip
+            // - tx.currency is null (still unresolved) or unknown: keep but flag
+            transactionsData = transactionsData.filter((tx: any) => {
+                if (tx.currency === myCurrency) return true
+                if (tx.currency && knownCurrencies.has(tx.currency)) return false
+                return true  // still null or unknown: keep (will be flagged)
+            })
+
             const uniqueAddresses = transactionsData
                 .map((t: any) => t[t.direction === 2 ? 'addr_from' : 'addr_to'])
                 .filter(
@@ -643,6 +697,8 @@ export class ComchainUserAccount extends UserAccount {
             }
             for (let idx = 0; idx < transactionsData.length; idx++) {
                 const transactionData = transactionsData[idx]
+                const isUnknownCurrency =
+                    transactionData.currency !== myCurrency
                 if (transactionData.addr_to === `0x${this.address}`) {
                     yield new ComchainTransaction(
                         {
@@ -653,6 +709,7 @@ export class ComchainUserAccount extends UserAccount {
                         {
                             comchain: Object.assign({}, transactionData, {
                                 amount: transactionData.recieved,
+                                isUnknownCurrency,
                             }),
                             odoo: {addressResolve, reconversionStatusResolve}
                         }
@@ -668,6 +725,7 @@ export class ComchainUserAccount extends UserAccount {
                         {
                             comchain: Object.assign({}, transactionData, {
                                 amount: -transactionData.sent,
+                                isUnknownCurrency,
                             }),
                             odoo: {addressResolve, reconversionStatusResolve}
                         }
