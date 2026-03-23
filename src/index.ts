@@ -404,13 +404,10 @@ export class ComchainUserAccount extends UserAccount {
         return await creditableAccounts[0].getPendingTopUp()
     }
 
-    private _type: number
-    private async getType () {
-        if (!this._type) {
-            const currencyMgr = await this.getCurrencyMgr()
-            this._type = await currencyMgr.bcRead.getAccountType(this.address)
-        }
-        return this._type
+    @ttlcache({ttl: 5})
+    public async getType () {
+        const currencyMgr = await this.getCurrencyMgr()
+        return await currencyMgr.bcRead.getAccountType(this.address)
     }
 
     public async getTypeLabel (): Promise<string> {
@@ -424,15 +421,10 @@ export class ComchainUserAccount extends UserAccount {
     }
 
 
-    private _status: number
+    @ttlcache({ttl: 5})
     private async getStatus () {
-        if (!this._status) {
-            const currencyMgr = await this.getCurrencyMgr()
-            this._status = await currencyMgr.bcRead.getAccountStatus(
-                this.address
-            )
-        }
-        return this._status
+        const currencyMgr = await this.getCurrencyMgr()
+        return await currencyMgr.bcRead.getAccountStatus(this.address)
     }
 
 
@@ -447,6 +439,7 @@ export class ComchainUserAccount extends UserAccount {
         return accountType == 2 || accountType == 3
     }
 
+    @ttlcache({ttl: 5})
     public async isBusinessForFinanceBackend () {
         return (await this.getType()) == 1
     }
