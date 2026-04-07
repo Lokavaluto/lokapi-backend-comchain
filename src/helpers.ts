@@ -1,4 +1,14 @@
 
+/**
+ * Convert an integer amount in cents to a formatted string.
+ *
+ * @example
+ * ```ts @import.meta.vitest
+ * expect(intCents2strAmount(0n)).toBe("0.00")
+ * expect(intCents2strAmount(100n)).toBe("1.00")
+ * expect(intCents2strAmount(-150n)).toBe("-1.50")
+ * ```
+ */
 let intCents2strAmount = (dataIntCents: bigint): string => {
     let sign = ""
     if (dataIntCents < 0n) {
