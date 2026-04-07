@@ -746,18 +746,44 @@ export class ComchainUserAccount extends UserAccount {
     }
 
 
+    @ttlcache({ttl: 15})
+    private async _getNantBalance (addr: string): Promise<number> {
+        const currencyMgr = await this.getCurrencyMgr()
+        return currencyMgr.bcRead.getNantBalance(addr)
+    }
+
+    @ttlcache({ttl: 86400})
+    private async _getArchivedNantBalance (addr: string): Promise<number> {
+        const currencyMgr = await this.getCurrencyMgr()
+        return currencyMgr.bcRead.getNantBalance(addr)
+    }
+
     @ttlcache({ttl: 3})
     public async getCurrencySupply () {
         const currencyMgr = await this.getCurrencyMgr()
-        let totalSupply =  await currencyMgr.bcRead.getCurrencySupply()
 
-        for (const technicalAccountAddr of this.parent.technicalAccountAddrs){
-            const technicalAccountNantBalance = await currencyMgr.bcRead.getNantBalance(
-                technicalAccountAddr
-            )
-            totalSupply -= technicalAccountNantBalance
-        }
-        return totalSupply
+        const [totalSupply, archivedAddresses] = await Promise.all([
+            currencyMgr.bcRead.getCurrencySupply(),
+            this.lccApi.$get('/wallet/archived', null, 'wallet/0'),
+        ])
+
+        const [technicalBalances, archivedBalances] = await Promise.all([
+            Promise.all(
+                this.parent.technicalAccountAddrs.map(
+                    (addr: string) => this._getNantBalance(addr)
+                )
+            ),
+            Promise.all(
+                archivedAddresses.map(
+                    (addr: string) => this._getArchivedNantBalance(addr)
+                )
+            ),
+        ])
+
+        const excludedCents = [...technicalBalances, ...archivedBalances]
+            .map((a: string) => strAmount2intCents(a))
+            .reduce((s: bigint, a: bigint) => s + a, 0n)
+        return intCents2strAmount(strAmount2intCents(totalSupply) - excludedCents)
     }
 }
 
