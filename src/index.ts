@@ -337,18 +337,15 @@ export class ComchainUserAccount extends UserAccount {
     }
 
     _errorsCache = new Map<Error, Error>
+    @singleton
     private async getCurrencyMgr () {
-        if (!this._currencyMgrPromise) {
+        try {
             // This will trigger the discovery of master servers and load
             // the server conf of the currency.
-            this._currencyMgrPromise = this.backends.comchain.getCurrencyMgr(
+            return await this.backends.comchain.getCurrencyMgr(
                 this.jsonData.wallet.server.name
             )
-        }
-        try {
-            return await this._currencyMgrPromise
         } catch(err: any) {
-            this._currencyMgrPromise = null
             if (err instanceof Jsc3lException.NoEndpointAvailable) {
                 if (!this._errorsCache.has(err)) {
                     this._errorsCache.set(
@@ -363,8 +360,6 @@ export class ComchainUserAccount extends UserAccount {
             throw err
         }
     }
-
-    _currencyMgrPromise: { [index: string]: any }
 
 
     /**
@@ -764,4 +759,120 @@ export class ComchainUserAccount extends UserAccount {
         }
         return totalSupply
     }
+}
+
+
+/* @skip-prod-transpilation */
+if (import.meta.vitest) {
+    const { it, expect, describe, vi } = import.meta.vitest
+
+    /**
+     * Build a minimal ComchainUserAccount-shaped object with a
+     * mocked ``backends.comchain.getCurrencyMgr``.
+     */
+    function makeAccount (backendGetCurrencyMgr: (...args: any[]) => any) {
+        return {
+            backends: {
+                comchain: {
+                    getCurrencyMgr: backendGetCurrencyMgr,
+                },
+            },
+            jsonData: { wallet: { server: { name: 'test-server' } } },
+            _currencyMgrPromise: null as any,
+            _errorsCache: new Map<Error, Error>(),
+            getCurrencyMgr: ComchainUserAccount.prototype['getCurrencyMgr'],
+        }
+    }
+
+    describe('ComchainUserAccount.getCurrencyMgr', () => {
+
+        it('should cache the promise before resolution', async () => {
+            let resolve: (v: any) => void
+            const pending = new Promise(r => { resolve = r })
+            const mock = vi.fn(() => pending)
+            const account = makeAccount(mock)
+
+            const p1 = account.getCurrencyMgr()
+            const p2 = account.getCurrencyMgr()
+
+            expect(mock).toHaveBeenCalledTimes(1)
+            const fakeMgr = { fake: 'currencyMgr' }
+            resolve!(fakeMgr)
+            expect(await p1).toBe(fakeMgr)
+            expect(await p2).toBe(fakeMgr)
+        })
+
+        it('should cache the promise after resolution', async () => {
+            const fakeMgr = { fake: 'currencyMgr' }
+            const mock = vi.fn(() => Promise.resolve(fakeMgr))
+            const account = makeAccount(mock)
+
+            const r1 = await account.getCurrencyMgr()
+            const r2 = await account.getCurrencyMgr()
+
+            expect(mock).toHaveBeenCalledTimes(1)
+            expect(r1).toBe(fakeMgr)
+            expect(r2).toBe(fakeMgr)
+        })
+
+        it('should allow retry after rejection', async () => {
+            const fakeMgr = { fake: 'currencyMgr' }
+            const mock = vi.fn()
+                .mockRejectedValueOnce(new Error('network failure'))
+                .mockResolvedValueOnce(fakeMgr)
+            const account = makeAccount(mock)
+
+            await expect(account.getCurrencyMgr()).rejects.toThrow('network failure')
+            const result = await account.getCurrencyMgr()
+
+            expect(mock).toHaveBeenCalledTimes(2)
+            expect(result).toBe(fakeMgr)
+        })
+
+        it('should wrap NoEndpointAvailable into BackendUnavailableTransient', async () => {
+            const noEndpoint = new Jsc3lException.NoEndpointAvailable('no server')
+            const mock = vi.fn(() => Promise.reject(noEndpoint))
+            const account = makeAccount(mock)
+
+            await expect(account.getCurrencyMgr()).rejects.toBeInstanceOf(
+                e.BackendUnavailableTransient
+            )
+        })
+
+        it('should return identical error objects for the same NoEndpointAvailable instance', async () => {
+            const noEndpoint = new Jsc3lException.NoEndpointAvailable('no server')
+            const mock = vi.fn(() => Promise.reject(noEndpoint))
+            const account = makeAccount(mock)
+
+            const err1 = await account.getCurrencyMgr().catch((e: Error) => e)
+            const err2 = await account.getCurrencyMgr().catch((e: Error) => e)
+
+            expect(err1).toBe(err2)
+        })
+
+        it('should return different error objects for different NoEndpointAvailable instances', async () => {
+            const noEndpoint1 = new Jsc3lException.NoEndpointAvailable('server A')
+            const noEndpoint2 = new Jsc3lException.NoEndpointAvailable('server B')
+            const mock = vi.fn()
+                .mockRejectedValueOnce(noEndpoint1)
+                .mockRejectedValueOnce(noEndpoint2)
+            const account = makeAccount(mock)
+
+            const err1 = await account.getCurrencyMgr().catch((e: Error) => e)
+            const err2 = await account.getCurrencyMgr().catch((e: Error) => e)
+
+            expect(err1).not.toBe(err2)
+            expect(err1).toBeInstanceOf(e.BackendUnavailableTransient)
+            expect(err2).toBeInstanceOf(e.BackendUnavailableTransient)
+        })
+
+        it('should pass server name to backend getCurrencyMgr', async () => {
+            const mock = vi.fn(() => Promise.resolve({ fake: 'mgr' }))
+            const account = makeAccount(mock)
+
+            await account.getCurrencyMgr()
+
+            expect(mock).toHaveBeenCalledWith('test-server')
+        })
+    })
 }
