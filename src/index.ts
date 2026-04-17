@@ -331,14 +331,16 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
         if (safeWalletRecipient) {
             const safeWalletAddrs = safeWalletRecipient.monujo_backends[this.internalId]
             for (const safeWalletAddr of safeWalletAddrs) {
-                technicalAccounts.push('0x' + safeWalletAddr)
+                technicalAccounts.push('0x' + safeWalletAddr.toLowerCase())
             }
         }
 
         // Currency configuration's technical accounts
 
-        const technicalAccountAddrs = this.jsc3l.customization.cfg.server.technicalAccounts || []
+        const technicalAccountAddrs = (this.jsc3l.customization.cfg.server.technicalAccounts || [])
+                                          .map((a: string) => a.toLowerCase())
         for (const technicalAccountAddr of technicalAccountAddrs) {
+            if (technicalAccounts.includes(technicalAccountAddr)) continue
             technicalAccounts.push(technicalAccountAddr)
         }
         return technicalAccounts
@@ -888,6 +890,10 @@ export class ComchainUserAccount extends UserAccount {
             this.lccApi.$get('/wallet/archived', null, 'wallet/0'),
         ])
 
+        // remove any technicalAccountAddrs from archivedAddresses
+        const cleanedArchivedAddresses = archivedAddresses.map((a: string) => a.toLowerCase())
+            .filter((a: string) => !this.parent.technicalAccountAddrs.includes(a))
+
         const [technicalBalances, archivedBalances] = await Promise.all([
             Promise.all(
                 this.parent.technicalAccountAddrs.map(
@@ -895,7 +901,7 @@ export class ComchainUserAccount extends UserAccount {
                 )
             ),
             Promise.all(
-                archivedAddresses.map(
+                cleanedArchivedAddresses.map(
                     (addr: string) => this._getArchivedNantBalance(addr)
                 )
             ),
