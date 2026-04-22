@@ -671,7 +671,7 @@ export class ComchainUserAccount extends UserAccount {
     }
 
     public async * getTransactions (opts: any): AsyncGenerator {
-        if (!this.active) return
+        if (!opts?.showTxListForDisabledAccount && !this.active) return
 
         let dateBoundaries = false
         switch (
