@@ -4,6 +4,8 @@ import { BridgeObject, Transaction } from '@lokavaluto/lokapi/build/backend'
 
 export function isReconversion(jsonData, backend) {
     if (jsonData.direction !== 1) return false
+    if (jsonData.addr_from === 'Admin') return false
+
     const receiverAddr = jsonData['addr_to']
     return backend.technicalAccountAddrs.includes(receiverAddr)
 }
