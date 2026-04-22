@@ -667,13 +667,17 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
                 status: { editable: callerHasSetAdmin || (!isAdmin && canManageThisType) },
             }
         }
+        const currencyMgr = await this.fromUserAccount.getCurrencyMgr()
+        const hasCm = currencyMgr.customization.hasCM()
 
         // v2.0+: admin type is changeable, limits remain locked
         // Admin callers can manage other admins' type and status
         return {
             accountType: {
                 editable: canManageThisType,
-                warnings: ['set-admin-locks-limits'],
+                warnings: [
+                    ...hasCm ? ['set-admin-locks-limits'] : []
+                ],
             },
             limits: { editable: !isAdmin },
             status: { editable: canManageThisType },
