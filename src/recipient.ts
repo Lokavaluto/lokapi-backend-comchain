@@ -577,4 +577,64 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
     }
 
 
+    /**
+     * Returns per-field edit capabilities for inspecting this
+     * recipient's account.
+     *
+     * Combines:
+     *   - Contract version restrictions (old vs v2)
+     *   - Target account's current type (admin accounts have limits locked)
+     *   - Caller's permissions (can they manage this account type?)
+     */
+    public async getAccountEditCapabilities (): Promise<{
+        accountType: { editable: boolean, warnings: string[] },
+        limits: { editable: boolean },
+        status: { editable: boolean },
+    }> {
+        const callerAccounts = Object.values(this.parent.userAccounts) as any[]
+        const callerIsActive = callerAccounts.some(
+            (a: any) => a.active
+        )
+
+        if (!callerIsActive) {
+            return {
+                accountType: { editable: false, warnings: [] },
+                limits: { editable: false },
+                status: { editable: false },
+            }
+        }
+
+        const [version, targetType, editableTypes] = await Promise.all([
+            this.parent.getContractVersion(),
+            this.getTargetAccountTypeLabel(),
+            this.fromUserAccount.getEditableAccountTypeLabels(),
+        ])
+        const isAdmin = targetType === 'admin'
+        const canManageThisType = editableTypes.includes(targetType)
+        const callerHasSetAdmin = editableTypes.includes('admin')
+
+        if (!version) {
+            // Old contract: admin accounts are fully locked
+            return {
+                accountType: {
+                    editable: !isAdmin && canManageThisType,
+                    warnings: isAdmin ? [] : ['set-admin-irreversible'],
+                },
+                limits: { editable: !isAdmin },
+                status: { editable: callerHasSetAdmin || (!isAdmin && canManageThisType) },
+            }
+        }
+
+        // v2.0+: admin type is changeable, limits remain locked
+        // Admin callers can manage other admins' type and status
+        return {
+            accountType: {
+                editable: canManageThisType,
+                warnings: ['set-admin-locks-limits'],
+            },
+            limits: { editable: !isAdmin },
+            status: { editable: canManageThisType },
+        }
+    }
+
 }
