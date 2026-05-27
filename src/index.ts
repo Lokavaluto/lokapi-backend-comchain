@@ -6,6 +6,7 @@ import { mux } from '@lokavaluto/lokapi/build/generator'
 import { makePasswordChecker } from '@lokavaluto/lokapi/build/backend/utils'
 import { BackendAbstract } from '@lokavaluto/lokapi/build/backend'
 import UserAccount from '@lokavaluto/lokapi/build/backend/odoo/userAccount'
+import { parseUri } from '@lokavaluto/lokapi/build/uri'
 import { e as httpRequestExc } from '@0k/types-request'
 
 import { ComchainAccount } from './account'
@@ -33,6 +34,19 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
 
     public getAccountTypeLabels (): string[] {
         return Object.keys(this.accountTypeToInt)
+    }
+
+    /**
+     * Return the comchain smart contract version string
+     *
+     * Example: ``"2.0"`` or ``""``` for legacy contracts
+     *
+     */
+    @singleton
+    public async getContractVersion (): Promise<string> {
+        const { currencyIdent } = parseUri(this.uri)
+        const currencyMgr = await this.jsc3l.getCurrencyMgr(currencyIdent)
+        return await currencyMgr.bcRead.getVersion()
     }
 
     @singleton
