@@ -663,6 +663,11 @@ export class ComchainUserAccount extends UserAccount {
         return this.address
     }
 
+    public async refresh (caller?: UserAccount): Promise<void> {
+        await super.refresh(caller)
+        ;(this as any).clearCaches()
+    }
+
     public async * getTransactions (opts: any): AsyncGenerator {
         if (!this.active) return
 
