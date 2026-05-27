@@ -447,6 +447,12 @@ export class ComchainUserAccount extends UserAccount {
         return accountType == 2 || accountType == 3
     }
 
+
+    public async canSetPermissionsForFinancialBackend () {
+        let accountType = await this.getType()
+        return accountType == 2 || accountType == 4
+    }
+
     @ttlcache({ttl: 5})
     public async isBusinessForFinanceBackend () {
         return (await this.getType()) == 1
