@@ -32,6 +32,28 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
         propertyAdmin: 4,
     }
 
+    /**
+     * Maps each account type to the permission required to set it.
+     *
+     * comchain-only
+     *
+     * This exists because the comchain smart contract represents
+     * account capabilities as a single mutually-exclusive integer
+     * type (e.g., a user cannot be both professional and admin).
+     *
+     * This mapping is temporary. Once the smart contract moves to
+     * independent bit flags for each capability, permissions will
+     * be settable independently and this mapping will no longer be
+     * needed.
+     */
+    accountTypePermission: Record<string, string> = {
+        personal: 'setProperty',
+        professional: 'setProperty',
+        admin: 'setAdmin',
+        pledgeAdmin: 'setAdmin',
+        propertyAdmin: 'setAdmin',
+    }
+
     public getAccountTypeLabels (): string[] {
         return Object.keys(this.accountTypeToInt)
     }
@@ -426,6 +448,41 @@ export class ComchainUserAccount extends UserAccount {
             }
         }
         throw new Error(`Unknown account type value: ${accountType}`)
+    }
+
+
+    /**
+     * Returns account type labels that this user account is allowed
+     * to set, based on its own permissions.
+     *
+     * comchain-only
+     *
+     * This is a temporary measure tied to the legacy single-integer
+     * account type system in the comchain smart contract. When the
+     * contract moves to independent bit flags, each capability
+     * will be settable independently and this method will become
+     * unnecessary.
+     */
+    public async getEditableAccountTypeLabels (): Promise<string[]> {
+        const version = await this.parent.getContractVersion()
+        const perms = new Set(
+            this.jsonData.auth_context?.comchain_perms || []
+        )
+        const permissions = {
+            setAdmin: perms.has("set_admin"),
+            setProperty: perms.has("set_property"),
+        }
+        /**
+         * Account types that only exist on v2.0+ contracts.
+         * The old contract only supports: personal, professional, admin.
+         */
+        const v2AccountTypes = ['pledgeAdmin', 'propertyAdmin']
+        return this.parent.getAccountTypeLabels().filter((type: string) => {
+            if (!version && v2AccountTypes.includes(type)) return false
+            const requiredPermission = this.parent.accountTypePermission[type]
+            if (!requiredPermission) return true
+            return permissions[requiredPermission]
+        })
     }
 
 
