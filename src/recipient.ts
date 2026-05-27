@@ -524,7 +524,11 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
     }
 
     get internalId () {
-        return `${this.parent.internalId}/${this.jsonData.comchain.address}`
+        return `${this.parent.uri}/${this.jsonData.comchain.address}`
+    }
+
+    get ident () {
+        return this.jsonData.comchain.address
     }
 
     /**

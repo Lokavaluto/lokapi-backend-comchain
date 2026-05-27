@@ -87,8 +87,7 @@ export class ComchainTransaction extends Transaction implements t.ITransaction {
             return false
         }
 
-        const backendInternalId = backend.internalId.replace(":", "://")
-        return this.jsonData.odoo.reconversionStatusResolve[`${backendInternalId}/tx/${this.id}`] || true
+        return this.jsonData.odoo.reconversionStatusResolve[`${backend.uri}/tx/${this.id}`] || true
     }
 
 

@@ -266,7 +266,7 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
     }
 
     public async registerWallet (cipheredWallet): Promise<ComchainUserAccount> {
-        const backendCurrency = this.jsonData.type.split(':')[1]
+        const { currencyIdent: backendCurrency } = parseUri(this.uri)
         const walletCurrency = (cipheredWallet as any)?.server?.name
         if (walletCurrency && walletCurrency !== backendCurrency) {
             throw new e.CurrencyMismatch(walletCurrency)
@@ -289,9 +289,8 @@ export default abstract class ComchainBackendAbstract extends BackendAbstract {
     public async createUserAccount ({
         password,
     }): Promise<ComchainUserAccount> {
-        const currencyMgr = await this.jsc3l.getCurrencyMgr(
-            this.jsonData.type.split(':')[1]
-        )
+        const { currencyIdent } = parseUri(this.uri)
+        const currencyMgr = await this.jsc3l.getCurrencyMgr(currencyIdent)
         const wallet = await currencyMgr.wallet.createWallet()
         const cipheredWallet = wallet.encryptWallet(password)
         const messageKey = wallet.messageKeysFromWallet()
@@ -558,6 +557,10 @@ export class ComchainUserAccount extends UserAccount {
         return `comchain:${this.address}`
     }
 
+    get ident () {
+        return this.address
+    }
+
     public async * getTransactions (opts: any): AsyncGenerator {
         if (!this.active) return
 
@@ -667,12 +670,9 @@ export class ComchainUserAccount extends UserAccount {
                     addressResolve[k] = contacts[k]
                 }
             }
-            // XXXvlab: will need to change all internalId's to match new
-            // format
-            const backendInternalId = backend.internalId.replace(":", "://")
             const uniqueReconversionAddresses = transactionsData
                 .filter((txData: any) => isReconversion(txData, backend))
-                .map((txData:any) => `${backendInternalId}/tx/${txData.hash}`)
+                .map((txData:any) => `${backend.uri}/tx/${txData.hash}`)
                 .filter((txId: any, idx, self) => self.indexOf(txId) === idx &&
                     typeof reconversionStatusResolve[txId] === 'undefined')
 

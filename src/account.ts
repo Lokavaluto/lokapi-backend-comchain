@@ -73,7 +73,7 @@ export class ComchainAccount extends Account implements t.IAccount {
 
     @singleton
     get internalId () {
-        return `${this.parent.internalId}/${this.type}`
+        return `${this.parent.uri}/${this.type}`
     }
 
     public async prepareTransfer (
