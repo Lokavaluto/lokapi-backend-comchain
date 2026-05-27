@@ -556,4 +556,25 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
         const type = await this.parent.jsc3l.bcRead.getAccountType(this.jsonData.comchain.address)
         return type === 1
     }
+
+
+    /**
+     * Returns the target account's type label by reading from the
+     * blockchain and mapping the int value to a label.
+     */
+    private async getTargetAccountTypeLabel (): Promise<string> {
+        const typeInt = await this.parent.jsc3l.bcRead.getAccountType(
+            this.jsonData.comchain.address
+        )
+        for (const [label, value] of Object.entries(
+            this.parent.accountTypeToInt
+        )) {
+            if (value === typeInt) {
+                return label
+            }
+        }
+        return 'unknown'
+    }
+
+
 }
