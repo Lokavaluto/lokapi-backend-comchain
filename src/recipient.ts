@@ -2,8 +2,6 @@ import { t, e } from '@lokavaluto/lokapi'
 import Recipient from '@lokavaluto/lokapi/build/backend/odoo/recipient'
 import { PlannedTransaction } from '@lokavaluto/lokapi/build/backend/odoo/transaction'
 
-import { sleep, queryUntil } from '@lokavaluto/lokapi/build/utils'
-
 import { APIError } from '@com-chain/jsc3l/build/exception'
 
 import { ComchainTransaction } from './transaction'
@@ -535,60 +533,37 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
         )
     }
 
+    /**
+     * Validate the creation of this recipient's comchain account by
+     * activating it on both the financial backend (on-chain) and
+     * the administrative backend (Odoo).
+     *
+     * comchain-only
+     *
+     * Requires the caller to hold user-account validation rights
+     * (typically an admin); throws ``PermissionDenied`` otherwise.
+     *
+     * The on-chain status is read first and
+     * ``updateAccountForFinancialBackend({ status: true })`` is
+     * only invoked when the account is not already active, avoiding
+     * a redundant blockchain transaction. The administrative
+     * backend is then notified via
+     * ``updateAccountForAdministrativeBackend({ status: true })``
+     * to mirror the active state.
+     */
     public async validateCreation () {
-        const comchain = this.backends.comchain
-        const wallet = comchain.jsonData.wallet
-        const destAddress = this.jsonData.comchain.address
-        const [type, limitMin, limitMax] = [0, 0, 1000]
-        if (!(await this.backends.comchain.hasUserAccountValidationRights())) {
+        if (!(await this.parent.hasUserAccountValidationRights())) {
             throw new e.PermissionDenied(
                 'You need to be admin to validate creation of wallet',
             )
         }
-        const status = await this.parent.jsc3l.bcRead.getAccountStatus(
-            destAddress,
-        )
-        if (status != 1) {
-            const clearWallet = await this.backends.comchain.unlockWallet()
-            await this.parent.jsc3l.bcTransaction.setAccountParam(
-                clearWallet,
-                destAddress,
-                1,
-                type,
-                limitMax,
-                limitMin,
-            )
-            try {
-                queryUntil(
-                    () =>
-                        this.parent.jsc3l.bcRead.getAccountStatus(destAddress),
-                    (res) => res === 1,
-                )
-            } catch (err) {
-                if (err instanceof e.TimeoutError) {
-                    console.log(
-                        'Transaction did not change account status in the expected time frame.',
-                    )
-                    throw err
-                }
-                throw err
-            }
-        } else {
-            console.log(
-                'Account is already validated, warning administrative backend',
-            )
+        const address = this.jsonData.comchain.address
+        const cc = await this.fromUserAccount.getCurrencyMgr()
+        const status = await cc.bcRead.getAccountStatus(address)
+        if (status !== 1) {
+            await this.updateAccountForFinancialBackend({ status: true })
         }
-        await this.backends.odoo.activateAccount([
-            {
-                account_id: `comchain:${destAddress}`,
-                recipient_id: this.jsonData.odoo.id,
-                data: {
-                    type,
-                    credit_min: limitMin,
-                    credit_max: limitMax,
-                },
-            },
-        ])
+        await this.updateAccountForAdministrativeBackend({ status: true })
     }
 
     get internalId () {
