@@ -204,29 +204,97 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
         }
     }
 
-    async updateAccount(status: number, accountType: number, lowLimit: number, highLimit: number) {
-        const jsc3l = this.parent.jsc3l
-        const clearWallet = await this.backends.comchain.unlockWallet()
+    /**
+     * Convert comchain-flavored account data to the format expected
+     * by the administrative backend (Odoo) and forward via
+     * ``POST /wallet/<ident>/update``.
+     *
+     * Conversions applied before forwarding:
+     *   - ``accountType``: label string → integer
+     *   - ``status``: boolean → ``"active"`` / ``"disabled"``
+     *
+     * Only provided fields are included in the payload; omitted
+     * fields are left unchanged on the admin side.
+     */
+    async updateAccountForAdministrativeBackend(accountData: {
+        status?: boolean,
+        accountType?: string,
+        lowLimit?: string,
+        highLimit?: string,
+    }) {
+        const converted: Record<string, string | number> = {}
+        if (accountData.accountType !== undefined) {
+            const accountTypeInt = this.parent.accountTypeToInt[accountData.accountType]
+            if (accountTypeInt === undefined) {
+                throw new Error(`Invalid account type: ${accountData.accountType}`)
+            }
+            converted.accountType = accountTypeInt
+        }
+        if (accountData.status !== undefined) {
+            converted.status = accountData.status ? "active" : "disabled"
+        }
+        if (accountData.lowLimit !== undefined) {
+            converted.lowLimit = accountData.lowLimit
+        }
+        if (accountData.highLimit !== undefined) {
+            converted.highLimit = accountData.highLimit
+        }
+        return super.updateAccountForAdministrativeBackend(converted)
+    }
 
-        const accountTypeInt = this.parent.accountTypeToInt[accountType]
-        if (accountTypeInt === undefined) {
+    /**
+     * Apply account parameter changes on the comchain blockchain.
+     *
+     * Accepts partial data: only the fields present in
+     * ``accountData`` are treated as updates. Missing fields are
+     * fetched from the blockchain so that ``setAccountParam`` always
+     * receives a complete parameter set. Only missing fields
+     * trigger an RPC read, keeping blockchain calls to a minimum.
+     *
+     * Conversions applied to caller-provided values:
+     *   - ``accountType``: label string → integer
+     *   - ``status``: boolean → ``1`` / ``0``
+     *
+     * After the transaction is submitted, polls until the
+     * transaction is mined (blockHash present) or a 10 s timeout
+     * is reached.
+     */
+    async updateAccountForFinancialBackend(accountData: {
+        status?: boolean,
+        accountType?: string,
+        lowLimit?: string,
+        highLimit?: string,
+    }) {
+        const { status, accountType, lowLimit, highLimit } = accountData
+        const jsc3l = this.parent.jsc3l
+        const address = this.jsonData.comchain.address
+        const cc = await this.fromUserAccount.getCurrencyMgr()
+
+        if (accountType !== undefined &&
+            this.parent.accountTypeToInt[accountType] === undefined) {
             throw new Error(`Invalid account type: ${accountType}`)
         }
 
-        let jsonData
-        try {
-            jsonData = await jsc3l.bcTransaction.setAccountParam(
-                clearWallet,
-                this.jsonData.comchain.address,
-                status ? 1:0,
-                accountTypeInt,
-                highLimit,
-                lowLimit
-            )
-        } catch (err: any) {
-            throw err
-        }
+        // For each param: use the caller's value (converted) or fetch
+        // from blockchain. Only missing fields trigger an RPC call.
+        const [accountTypeInt, statusInt, resolvedLowLimit, resolvedHighLimit]:
+            [number, number, string, string] = await Promise.all([
+                accountType !== undefined
+                    ? this.parent.accountTypeToInt[accountType]
+                    : cc.bcRead.getAccountType(address),
+                status !== undefined
+                    ? (status ? 1 : 0)
+                    : cc.bcRead.getAccountStatus(address),
+                lowLimit ?? cc.bcRead.getCmLimitBelow(address),
+                highLimit ?? cc.bcRead.getCmLimitAbove(address),
+            ])
 
+        const clearWallet = await this.backends.comchain.unlockWallet()
+
+        const jsonData = await jsc3l.bcTransaction.setAccountParam(
+            clearWallet, address,
+            statusInt, accountTypeInt, resolvedHighLimit, resolvedLowLimit,
+        )
 
         if (!/^0x[a-fA-F0-9]{64}$/.test(jsonData.toString())) {
             console.error(
