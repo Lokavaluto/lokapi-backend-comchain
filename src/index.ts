@@ -623,7 +623,6 @@ export class ComchainUserAccount extends UserAccount {
      */
     @ttlcache({ttl: 3})
     async getAccountsByAddress (address: string) {
-        if (!this.active) return []
 
         const accounts = []
         const currencyMgr = await this.getCurrencyMgr()
