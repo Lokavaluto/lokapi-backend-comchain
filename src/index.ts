@@ -440,6 +440,45 @@ export class ComchainUserAccount extends UserAccount {
         return await currencyMgr.bcRead.getAccountType(this.address)
     }
 
+    /**
+     * Return administrative backend's stored copy of the
+     * comchain-specific wallet state (account type, status, credit
+     * limits).
+     *
+     * comchain-only
+     *
+     * Prefetched in ``backend_credentials`` — no HTTP call.
+     * Compare with blockchain values to detect desync.
+     *
+     * ``accountType`` is converted from Odoo's integer to the
+     * string label used on the JS side.
+     */
+    get comchainMirroredState (): {
+        accountType: string,
+        status: boolean,
+        lowLimit: number,
+        highLimit: number,
+    } {
+        const raw = this.jsonData.comchain
+        const accountTypeInt = raw.accountType
+        let accountType: string | undefined
+        for (const [label, value] of Object.entries(this.parent.accountTypeToInt)) {
+            if (value === accountTypeInt) {
+                accountType = label
+                break
+            }
+        }
+        if (accountType === undefined) {
+            throw new Error(`Unknown account type value: ${accountTypeInt}`)
+        }
+        return {
+            accountType,
+            status: raw.status === "active",
+            lowLimit: raw.lowLimit,
+            highLimit: raw.highLimit,
+        }
+    }
+
     public async getTypeLabel (): Promise<string> {
         const accountType = await this.getType()
         for (const [label, value] of Object.entries(this.parent.accountTypeToInt)) {
