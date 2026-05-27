@@ -705,4 +705,40 @@ export class ComchainRecipient extends Recipient implements t.IRecipient {
         }
     }
 
+
+    /**
+     * Archive this recipient on the administrative backend, after
+     * ensuring its comchain account is disabled on-chain.
+     *
+     * The administrative backend's archive flow assumes the
+     * underlying wallet has already been disabled on the financial
+     * backend. This override enforces that invariant: the
+     * on-chain status is read first, and ``super.archive()`` is
+     * only called once the account is disabled (``status === 0``).
+     *
+     * When the account is still active, ``updateAccountForFinancialBackend``
+     * is invoked to disable it and the on-chain status is re-read.
+     * The loop is retried up to three times to absorb transient
+     * propagation delays between transaction submission and the
+     * status becoming visible on-chain; an ``Error`` is thrown if
+     * the account is still active after the final attempt.
+     */
+    public async archive (): Promise<boolean> {
+        const address = this.jsonData.comchain.address
+        const cc = await this.fromUserAccount.getCurrencyMgr()
+        let currentStatus = await cc.bcRead.getAccountStatus(address)
+
+        for (let attempt = 0; attempt < 3; attempt++) {
+            if (currentStatus === 0) {
+                return super.archive()
+            }
+
+            await this.updateAccountForFinancialBackend({ status: false })
+            currentStatus = await cc.bcRead.getAccountStatus(address)
+        }
+
+        throw new Error(
+            'Failed to disable account on the financial backend after 3 attempts'
+        )
+    }
 }
