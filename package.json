@@ -39,7 +39,7 @@
         "vitest": "^3.2.4"
     },
     "dependencies": {
-        "@0k/cache": "^0.1.1",
+        "@0k/cache": "^0.2.0",
         "@0k/types-request": "^1.0.1",
         "@com-chain/jsc3l": ">=2.0.1-rc",
         "@lokavaluto/lokapi": "0.1.0 || >=0.1.1-alpha"
